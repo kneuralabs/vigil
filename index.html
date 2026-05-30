@@ -465,7 +465,13 @@ async function checkDNS(){
 // Live reachability probe of the entered Intranet URL. Uses a no-cors fetch:
 // an opaque response means the host responded; a network error / timeout means
 // it is not reachable from the browser (expected for a private network).
+// When the agent is connected its /status feed (real HTTP codes) owns the rows,
+// so the opaque browser sweep would only downgrade the data — skip it.
 async function checkIntranet(){
+  if(agentConnected){
+    addEvent('info','Intranet','Agent connected — service rows reflect live HTTP status from the agent /status feed.');
+    return;
+  }
   const probe=document.getElementById('intranet-probe');
   const raw=document.getElementById('intranet-url-input').value.trim();
   const titleEl=document.getElementById('intranet-probe-title');
@@ -551,6 +557,46 @@ async function runAllChecks(){
 let webhookInterval = null;
 let seenEventKeys = new Set();
 
+function iconForService(name){
+  const m=INTRANET_SERVICES.find(s=>s.name===name);
+  return m?m.icon:'&#x1F310;';
+}
+
+// Render the intranet service rows from the agent's /status snapshot, showing
+// the real HTTP status code per service and flagging any anomaly/breach.
+function renderAgentStatus(s){
+  if(!s||!Array.isArray(s.services))return false;
+  const probe=document.getElementById('intranet-probe');
+  const titleEl=document.getElementById('intranet-probe-title');
+  const noteEl=document.getElementById('intranet-probe-note');
+  let healthy=0;const total=s.services.length;
+  const rows=s.services.map(svc=>{
+    const cat=svc.category||'info';
+    if(cat==='ok')healthy++;
+    const flags=Array.isArray(svc.flags)?svc.flags:[];
+    let sub=String(svc.url||svc.name).replace(/^https?:\/\//i,'');
+    if(svc.latency_ms!=null)sub+=' &middot; '+svc.latency_ms+' ms';
+    if(flags.length)sub+=' &middot; <span style="color:var(--crit)">'+flags.join('; ')+'</span>';
+    let label=svc.code?(''+svc.code):'DOWN';
+    let cls=cat;
+    if(flags.length){label='&#x1F6A8; '+label;cls='crit';}
+    return intranetRow(iconForService(svc.name),svc.name,sub,cls,label);
+  }).join('');
+  probe.innerHTML=rows;
+  const alerts=Array.isArray(s.alerts)?s.alerts:[];
+  const cls=alerts.length?'crit':(healthy===total?'ok':'warn');
+  titleEl.textContent='Agent live · '+healthy+'/'+total+' healthy'+(alerts.length?' · '+alerts.length+' alert(s)':'');
+  titleEl.style.color='var(--'+cls+')';
+  if(alerts.length){
+    noteEl.innerHTML='<strong style="color:var(--crit)">&#x1F6A8; '+alerts.length+' active flag(s):</strong> '+
+      alerts.map(a=>String(a).replace(/</g,'&lt;')).join(' &middot; ');
+  }else{
+    noteEl.innerHTML='Live HTTP status codes &amp; latency from the connected agent. No anomalies flagged.';
+  }
+  setCard('intranet',cls,healthy+'/'+total,alerts.length?alerts.length+' alert(s)':healthy+' healthy');
+  return true;
+}
+
 function setConnStatus(msg,color){
   const el=document.getElementById('agent-conn-status');
   if(el){el.innerHTML=msg;el.style.color=color||'var(--muted)';}
@@ -581,6 +627,8 @@ function connectWebhook(){
   addEvent('info','Agent Connecting','Polling '+url+' every 10s for intranet events…');
   if(webhookInterval)clearInterval(webhookInterval);
   seenEventKeys=new Set();
+  // Derive the /status endpoint (real per-service HTTP codes) from the /events URL.
+  const statusUrl=/\/events(\?|$)/.test(url)?url.replace(/\/events(\?|$)/,'/status$1'):null;
 
   async function poll(){
     let r;
@@ -622,6 +670,14 @@ function connectWebhook(){
     agentConnected=true;
     setAgentBadge('ok','AGENT CONNECTED');
     setConnStatus('Connected · '+events.length+' in buffer · '+added+' new · last poll '+new Date().toLocaleTimeString(),'var(--ok)');
+
+    // Pull the live per-service snapshot so each row shows its real HTTP code + flags.
+    if(statusUrl){
+      try{
+        const sr=await fetch(statusUrl,{cache:'no-store'});
+        if(sr.ok){renderAgentStatus(await sr.json());}
+      }catch(_){/* status endpoint optional (e.g. relay-only PUSH setups) */}
+    }
   }
   poll();
   webhookInterval=setInterval(poll,10000);

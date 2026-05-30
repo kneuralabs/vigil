@@ -91,14 +91,45 @@ inbound ever touches your network.
 | slow, or `401`/`403` (auth-gated), or other `4xx` | `warn` |
 | `5xx`, timeout, connection refused / DNS failure | `crit` |
 
-Events are emitted on **state change** (e.g. `ok → crit`) so the live feed shows
-transitions without flooding.
+Each service's **real HTTP status code** (200 / 403 / 500 …) and latency are
+recorded and exposed via `/status`. Status-change events are emitted on
+transition (e.g. `ok → crit`) so the feed shows changes without flooding.
+
+### Anomaly & breach detection
+
+The agent flags the following and emits a distinct event (`kind` =
+`anomaly` or `security`), throttled so each fires once per occurrence:
+
+| Signal | Kind | Trigger |
+|--------|------|---------|
+| **Latency spike** | `anomaly` | latency > `latency_anomaly_factor` × rolling-median baseline (and above `latency_anomaly_floor_ms`) — possible resource exhaustion / DoS |
+| **TLS cert expiry** | `anomaly` | a service's certificate expires within `cert_min_days` (`crit` under 3 days) |
+| **Expected-status mismatch** | `anomaly`/`security` | a route's code ≠ its configured `expect_status`. A protected route (`expect_status` 401/403) returning **200** is flagged as a possible **auth bypass / data exposure** |
+| **Auth-failure burst** | `security` | ≥ `auth_failure_burst` services return 401/403 in one cycle — possible credential-stuffing / brute force |
+| **Server-error storm** | `security` | ≥ `server_error_storm` services return 5xx in one cycle — possible attack / cascading outage |
+
+Active flags also appear per-service in `/status` (`flags[]`) and aggregated in
+`alerts[]`, which the dashboard renders inline on each service row.
+
+> These are heuristic indicators from black-box HTTP probing, not confirmed
+> compromises — treat a `security` flag as a signal to investigate.
+
+### Asserting a route's expected code
+
+Add `expect_status` to any service to turn it into an assertion:
+
+```json
+{ "name": "API Gateway", "url": "https://intranet.kneuralabs.com/api", "expect_status": 401 }
+```
+
+Now an `/api` that answers `200` without credentials raises a security flag.
 
 ## Endpoints
 
 | Method | Path | Returns |
 |--------|------|---------|
-| `GET` | `/events` | Array of recent events (the dashboard format). |
+| `GET` | `/events` | Rolling event log. Each event adds `service`, `code`, `latency_ms`, `category`, `kind` to the base `{type,title,message,time,ts}`. |
+| `GET` | `/status` | Live snapshot: `{generated, services:[{name,url,code,category,latency_ms,checked,flags[]}], alerts[]}`. The dashboard reads this to show real status codes per row. |
 | `GET` | `/health` | `{"status":"ok"}` liveness probe. |
 | `OPTIONS` | any | CORS preflight. |
 
