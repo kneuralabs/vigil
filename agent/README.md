@@ -38,6 +38,39 @@ The script prints (and opens) a link like
 — the dashboard reads that `?agent=` parameter and connects automatically.
 Keep the terminal window open; press Ctrl+C to stop monitoring.
 
+### Permanent setup (stable URL that survives restarts)
+
+The quick tunnel above is ephemeral — its URL changes each run. For a stable
+URL, use a **named tunnel** on a hostname in a domain you have on Cloudflare
+(free plan is fine):
+
+```bash
+# macOS / Linux
+curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash -s -- \
+     --permanent --hostname agent.kneuralabs.com
+```
+
+```powershell
+# Windows: save the script first, then run with parameters
+irm https://vigil.kneuralabs.com/agent/run-agent.ps1 -OutFile run-agent.ps1
+./run-agent.ps1 -Permanent -Hostname agent.kneuralabs.com
+```
+
+This does a one-time `cloudflared tunnel login` (opens a browser — pick the
+domain that owns the hostname), creates/reuses a named tunnel, routes
+`agent.kneuralabs.com` to it, and serves a fixed
+`https://agent.kneuralabs.com/events`. It also drops ready-to-install
+`vigil-agent.service` + `vigil-tunnel.service` units in `~/.vigil-agent/` so you
+can run everything 24/7 across reboots:
+
+```bash
+sudo cp ~/.vigil-agent/vigil-*.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now vigil-agent vigil-tunnel
+```
+
+Options: `--name <tunnel-name>` (default `vigil-agent`), `--port <port>`
+(default `8787`).
+
 ## Quick start (manual)
 
 ```bash
