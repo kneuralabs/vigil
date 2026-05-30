@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KneuraLabs · Live Ecosystem Monitor</title>
+<title>Vigil™</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -24,8 +27,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
   background:rgba(10,15,30,.85);border:1px solid var(--border);border-radius:12px;
   backdrop-filter:blur(20px);margin-bottom:16px;flex-wrap:wrap;gap:10px}
 .logo{display:flex;align-items:center;gap:10px}
-.logo-icon{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#7b2fff);
-  display:flex;align-items:center;justify-content:center;font-size:16px;animation:pulse 2s ease-in-out infinite}
+.logo-icon{width:40px;height:40px;border-radius:8px;overflow:hidden;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;animation:pulse 2s ease-in-out infinite}
+.logo-icon img{width:100%;height:100%;object-fit:contain;display:block}
+.logo h1 .tm{font-size:.55em;font-weight:700;vertical-align:super;margin-left:1px;color:var(--accent)}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--pulse)}50%{box-shadow:0 0 0 12px transparent}}
 .logo h1{font-size:1.05rem;font-weight:800;letter-spacing:-.02em}
 .logo span{font-size:.65rem;color:var(--muted);display:block;letter-spacing:.08em;margin-top:2px}
@@ -139,9 +144,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 
 <header>
   <div class="logo">
-    <div class="logo-icon">&#x2B61;</div>
+    <div class="logo-icon"><img src="LOGO.png" alt="Vigil logo"></div>
     <div>
-      <h1>KneuraLabs &middot; Live Ecosystem Monitor</h1>
+      <h1>Vigil<sup class="tm">&trade;</sup></h1>
       <span>REAL-TIME &middot; SSL &middot; DNS &middot; CERT TRANSPARENCY &middot; FREE PUBLIC APIs</span>
     </div>
   </div>
