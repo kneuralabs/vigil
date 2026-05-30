@@ -8,6 +8,13 @@
   "verify_tls": true,
   "auth_token": "",
   "webhook_url": "",
+
+  "latency_anomaly_floor_ms": 800,
+  "latency_anomaly_factor": 3.0,
+  "auth_failure_burst": 3,
+  "server_error_storm": 3,
+  "cert_min_days": 14,
+
   "services": [
     { "name": "SSO / Auth Portal", "url": "https://intranet.kneuralabs.com/auth" },
     { "name": "HR System",         "url": "https://intranet.kneuralabs.com/hr" },
@@ -15,6 +22,6 @@
     { "name": "File Storage",      "url": "https://intranet.kneuralabs.com/files" },
     { "name": "Analytics",         "url": "https://intranet.kneuralabs.com/analytics" },
     { "name": "VPN Gateway",       "url": "https://intranet.kneuralabs.com/vpn" },
-    { "name": "API Gateway",       "url": "https://intranet.kneuralabs.com/api" }
+    { "name": "API Gateway",       "url": "https://intranet.kneuralabs.com/api", "expect_status": 401 }
   ]
 }

@@ -5,34 +5,42 @@ Vigil Intranet Agent
 
 A tiny, dependency-free monitoring agent you run *inside* your private network
 (e.g. on a box that can reach intranet.kneuralabs.com). It periodically
-health-checks your internal services and exposes their status as JSON in the
-exact shape the Vigil dashboard expects:
+health-checks your internal services, captures their **real HTTP status codes**
+and latency, runs anomaly / breach detection, and exposes everything to the
+Vigil dashboard.
 
-    [{"type": "ok|info|warn|crit", "title": "...", "message": "...", "time": "..."}]
+Endpoints (all CORS-enabled, GET):
 
-Two ways to get those events to the dashboard (vigil.kneuralabs.com):
+  /events   Rolling event log in the dashboard's shape:
+            [{"type":"ok|info|warn|crit","title","message","time","ts",
+              "service","code","latency_ms","category","kind"}]
+            (extra keys are ignored by older dashboards)
 
-  1. PULL  - The agent serves GET /events (CORS-enabled). If this agent is
-             reachable from the browser (e.g. via a Cloudflare Tunnel, a
-             reverse proxy, or because the dashboard is opened on-network),
-             paste that URL into the dashboard's "Connect Intranet Agent" box.
+  /status   Live per-service snapshot with real status codes + flags:
+            {"generated":"...","services":[
+                {"name","url","code","category","latency_ms","checked","flags":[...]}
+             ],"alerts":[ ... active security/anomaly flags ... ]}
 
-  2. PUSH  - Set "webhook_url" in the config. The agent POSTs each new event
-             batch to a public relay you control (Pipedream / Make.com /
-             Cloudflare Worker), and you point the dashboard at the relay's
-             read URL. Use this when the agent must stay fully private.
+  /health   {"status":"ok"} liveness probe.
 
-Standard library only. Works on Python 3.7+. No pip install required.
+Delivery to the dashboard:
+  PULL  - expose this agent (e.g. `cloudflared tunnel --url http://localhost:8787`)
+          and paste the .../events URL into the dashboard. The dashboard also
+          reads .../status to render real status codes per service.
+  PUSH  - set "webhook_url" to POST events to a public relay you control.
+
+Standard library only. Python 3.7+. No pip install.
 
 Usage:
     python3 vigil_agent.py --config config.json
-    python3 vigil_agent.py            # uses ./config.json if present, else defaults
 """
 
 import argparse
 import json
 import os
+import socket
 import ssl
+import statistics
 import sys
 import threading
 import time
@@ -41,11 +49,8 @@ import urllib.request
 from collections import deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
 
-# --------------------------------------------------------------------------- #
-# Defaults — mirror the apps the dashboard lists under "Monitored Apps".
-# Override entirely via config.json.
-# --------------------------------------------------------------------------- #
 DEFAULT_CONFIG = {
     "bind_host": "0.0.0.0",
     "bind_port": 8787,
@@ -54,11 +59,17 @@ DEFAULT_CONFIG = {
     "slow_threshold_ms": 1500,
     "event_buffer_size": 200,
     "verify_tls": True,
-    # Optional shared secret. If set, /events requires ?token=... or
-    # an "Authorization: Bearer <token>" header.
     "auth_token": "",
-    # Optional push target. If set, new events are POSTed here as JSON.
     "webhook_url": "",
+    # --- anomaly / breach detection tunables ---
+    "latency_anomaly_floor_ms": 800,   # ignore spikes below this absolute floor
+    "latency_anomaly_factor": 3.0,     # spike = latency > factor * baseline median
+    "auth_failure_burst": 3,           # >= this many 401/403 in one cycle -> breach flag
+    "server_error_storm": 3,           # >= this many 5xx in one cycle -> breach flag
+    "cert_min_days": 14,               # warn when a TLS cert expires within N days
+    # services: {name, url, [expect_status]}.
+    # expect_status lets you assert a route's expected code; a mismatch is flagged
+    # (e.g. expect_status 401 on a protected API -> a 200 is a possible auth bypass).
     "services": [
         {"name": "SSO / Auth Portal", "url": "https://intranet.kneuralabs.com/auth"},
         {"name": "HR System", "url": "https://intranet.kneuralabs.com/hr"},
@@ -86,26 +97,64 @@ class EventLog:
         self._events = deque(maxlen=maxlen)
         self._lock = threading.Lock()
 
-    def add(self, etype, title, message):
-        evt = {
-            "type": etype,
-            "title": title,
-            "message": message,
-            "time": hhmmss(),
-            "ts": now_iso(),
-        }
+    def add(self, etype, title, message, **extra):
+        evt = {"type": etype, "title": title, "message": message,
+               "time": hhmmss(), "ts": now_iso()}
+        evt.update(extra)
         with self._lock:
             self._events.append(evt)
         return evt
 
     def snapshot(self):
         with self._lock:
-            # Newest last is fine; dashboard appends in order received.
             return list(self._events)
 
 
+class ServiceState:
+    """Latest health + rolling history for one monitored service."""
+
+    def __init__(self, name, url, expect_status=None):
+        self.name = name
+        self.url = url
+        self.expect_status = expect_status
+        self.code = None
+        self.category = None
+        self.latency_ms = None
+        self.checked = None
+        self.flags = []                 # active flags from the most recent cycle
+        self.lat_hist = deque(maxlen=20)
+        self.was_anomalous = False          # throttles repeated latency-anomaly events
+        self.expect_violation_active = False  # throttles repeated expect_status events
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "url": self.url,
+            "code": self.code,
+            "category": self.category,
+            "latency_ms": self.latency_ms,
+            "checked": self.checked,
+            "flags": list(self.flags),
+        }
+
+
+def categorize(code, latency_ms, slow_ms):
+    """Map a raw HTTP result to a dashboard category + short note."""
+    if code == 0:
+        return "crit", "unreachable"
+    if code >= 500:
+        return "crit", "server error"
+    if code in (401, 403):
+        return "warn", "auth-gated"
+    if code >= 400:
+        return "warn", "client error"
+    if latency_ms is not None and latency_ms > slow_ms:
+        return "warn", "slow"
+    return "ok", "ok"
+
+
 class Monitor(threading.Thread):
-    """Background poller that health-checks each configured service."""
+    """Background poller: health checks, status codes, anomaly + breach flags."""
 
     daemon = True
 
@@ -113,8 +162,15 @@ class Monitor(threading.Thread):
         super().__init__(name="vigil-monitor")
         self.cfg = config
         self.log = log
-        self._last_status = {}  # service name -> "ok"|"warn"|"crit"
+        self.services = [
+            ServiceState(s.get("name") or s.get("url"), s["url"], s.get("expect_status"))
+            for s in config.get("services", [])
+        ]
         self._stop = threading.Event()
+        self._auth_burst_active = False
+        self._error_storm_active = False
+        self._cert_flagged = {}  # url -> bool, throttles cert events
+        self._lock = threading.Lock()
         if config.get("verify_tls", True):
             self._ssl_ctx = ssl.create_default_context()
         else:
@@ -123,53 +179,181 @@ class Monitor(threading.Thread):
     def stop(self):
         self._stop.set()
 
-    def _check(self, svc):
-        """Return (status, message) for one service."""
-        url = svc["url"]
+    def status_snapshot(self):
+        with self._lock:
+            services = [s.to_dict() for s in self.services]
+        alerts = []
+        for s in services:
+            for f in s["flags"]:
+                alerts.append(s["name"] + ": " + f)
+        if self._auth_burst_active:
+            alerts.insert(0, "BREACH SIGNAL: auth-failure burst across services")
+        if self._error_storm_active:
+            alerts.insert(0, "BREACH SIGNAL: server-error storm across services")
+        return {"generated": now_iso(), "services": services, "alerts": alerts}
+
+    # ---- individual checks -------------------------------------------------
+    def _http_check(self, url):
+        """Return (code, latency_ms). code == 0 means unreachable."""
         timeout = self.cfg.get("request_timeout_seconds", 5)
-        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "vigil-agent/1.0"})
+        req = urllib.request.Request(url, method="GET",
+                                     headers={"User-Agent": "vigil-agent/1.1"})
         start = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=self._ssl_ctx) as resp:
-                elapsed_ms = int((time.monotonic() - start) * 1000)
-                code = resp.getcode()
+                return resp.getcode(), int((time.monotonic() - start) * 1000)
         except urllib.error.HTTPError as e:
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            code = e.code
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            reason = getattr(e, "reason", e)
-            return "crit", "unreachable ({})".format(reason)
+            return e.code, int((time.monotonic() - start) * 1000)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return 0, int((time.monotonic() - start) * 1000)
 
-        slow = self.cfg.get("slow_threshold_ms", 1500)
-        if code >= 500:
-            return "crit", "HTTP {} ({} ms)".format(code, elapsed_ms)
-        if code >= 400:
-            # 401/403 from an SSO-protected endpoint means it's alive & guarding.
-            note = "auth-gated" if code in (401, 403) else "client error"
-            return "warn", "HTTP {} {} ({} ms)".format(code, note, elapsed_ms)
-        if elapsed_ms > slow:
-            return "warn", "slow: HTTP {} in {} ms".format(code, elapsed_ms)
-        return "ok", "HTTP {} ({} ms)".format(code, elapsed_ms)
+    def _cert_days_left(self, url):
+        """Best-effort TLS cert lifetime in days for https URLs (None if unknown)."""
+        p = urlparse(url)
+        if p.scheme != "https":
+            return None
+        host = p.hostname
+        port = p.port or 443
+        try:
+            ctx = ssl.create_default_context()
+            with socket.create_connection((host, port),
+                                          timeout=self.cfg.get("request_timeout_seconds", 5)) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ss:
+                    cert = ss.getpeercert()
+            na = cert.get("notAfter")
+            if not na:
+                return None
+            exp = datetime.strptime(na, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+            return (exp - datetime.now(timezone.utc)).days
+        except Exception:
+            return None  # self-signed / handshake issue -> skip silently
 
+    # ---- main cycle --------------------------------------------------------
     def _poll_once(self):
-        for svc in self.cfg.get("services", []):
-            name = svc.get("name") or svc.get("url")
-            status, message = self._check(svc)
-            prev = self._last_status.get(name)
-            if status != prev:
-                # State change -> always emit so the feed shows transitions.
-                self.log.add(status, name, message)
-                self._last_status[name] = status
-            # else: steady state, stay quiet to avoid flooding the feed.
+        slow = self.cfg.get("slow_threshold_ms", 1500)
+        floor = self.cfg.get("latency_anomaly_floor_ms", 800)
+        factor = self.cfg.get("latency_anomaly_factor", 3.0)
+        auth_fail = 0
+        server_err = 0
+
+        for svc in self.services:
+            code, latency = self._http_check(svc.url)
+            category, note = categorize(code, latency, slow)
+            flags = []
+
+            prev_code = svc.code
+            prev_cat = svc.category
+
+            # availability / status-code transitions
+            if prev_cat is None:
+                self.log.add(category, svc.name,
+                             ("unreachable" if code == 0 else "HTTP %d" % code) +
+                             " (%d ms)" % latency,
+                             service=svc.name, code=code, latency_ms=latency,
+                             category=category, kind="status")
+            elif category != prev_cat or code != prev_code:
+                msg = ("now unreachable" if code == 0 else "HTTP %d (%s)" % (code, note)) + \
+                      " — was %s" % ("unreachable" if prev_code == 0 else "HTTP %d" % prev_code)
+                self.log.add(category, svc.name, msg + " · %d ms" % latency,
+                             service=svc.name, code=code, latency_ms=latency,
+                             category=category, kind="status")
+
+            # latency-spike anomaly (needs a baseline)
+            if code != 0 and len(svc.lat_hist) >= 5:
+                baseline = statistics.median(svc.lat_hist)
+                threshold = max(floor, factor * baseline)
+                if latency > threshold:
+                    if not svc.was_anomalous:
+                        flags.append("latency spike %dms (baseline ~%dms)" % (latency, int(baseline)))
+                        self.log.add("warn", "⚠ Anomaly · " + svc.name,
+                                     "Latency spike: %d ms vs baseline ~%d ms — possible resource exhaustion/DoS"
+                                     % (latency, int(baseline)),
+                                     service=svc.name, code=code, latency_ms=latency,
+                                     category="warn", kind="anomaly")
+                    svc.was_anomalous = True
+                else:
+                    svc.was_anomalous = False
+            if code != 0:
+                svc.lat_hist.append(latency)
+
+            # expected-status assertion (config-driven breach/anomaly signal)
+            if svc.expect_status is not None:
+                if code == svc.expect_status:
+                    svc.expect_violation_active = False
+                elif svc.expect_status in (401, 403) and code == 200:
+                    flags.append("expected %d, got 200 (possible auth bypass/exposure)" % svc.expect_status)
+                    if not svc.expect_violation_active:
+                        self.log.add("crit", "\U0001F6A8 Security · " + svc.name,
+                                     "Protected route expected HTTP %d but returned 200 — possible authentication bypass or data exposure."
+                                     % svc.expect_status,
+                                     service=svc.name, code=code, latency_ms=latency,
+                                     category="crit", kind="security")
+                    svc.expect_violation_active = True
+                elif code != 0:
+                    flags.append("expected %d, got %d" % (svc.expect_status, code))
+                    svc.expect_violation_active = False
+
+            # cert expiry (best effort, throttled)
+            days = self._cert_days_left(svc.url)
+            if days is not None:
+                cert_min = self.cfg.get("cert_min_days", 14)
+                if days < cert_min:
+                    flags.append("TLS cert expires in %d days" % days)
+                    if not self._cert_flagged.get(svc.url):
+                        sev = "crit" if days < 3 else "warn"
+                        self.log.add(sev, "⚠ Anomaly · " + svc.name,
+                                     "TLS certificate expires in %d day(s)." % days,
+                                     service=svc.name, code=code, latency_ms=latency,
+                                     category=sev, kind="anomaly")
+                    self._cert_flagged[svc.url] = True
+                else:
+                    self._cert_flagged[svc.url] = False
+
+            # tally cross-service breach signals
+            if code in (401, 403):
+                auth_fail += 1
+            if code >= 500:
+                server_err += 1
+
+            with self._lock:
+                svc.code = code
+                svc.category = category
+                svc.latency_ms = latency
+                svc.checked = now_iso()
+                svc.flags = flags
+
+        self._breach_signals(auth_fail, server_err)
+
+    def _breach_signals(self, auth_fail, server_err):
+        # Auth-failure burst (possible credential-stuffing / brute force).
+        if auth_fail >= self.cfg.get("auth_failure_burst", 3):
+            if not self._auth_burst_active:
+                self.log.add("crit", "\U0001F6A8 Security · Auth Failure Burst",
+                             "%d services returned 401/403 this cycle — possible credential attack or auth outage."
+                             % auth_fail, kind="security", category="crit")
+            self._auth_burst_active = True
+        else:
+            self._auth_burst_active = False
+        # Server-error storm (possible attack / cascading failure).
+        if server_err >= self.cfg.get("server_error_storm", 3):
+            if not self._error_storm_active:
+                self.log.add("crit", "\U0001F6A8 Security · Server Error Storm",
+                             "%d services returned 5xx this cycle — possible attack or cascading outage."
+                             % server_err, kind="security", category="crit")
+            self._error_storm_active = True
+        else:
+            self._error_storm_active = False
 
     def run(self):
-        self.log.add("info", "Agent Online", "Vigil intranet agent started, polling services...")
+        self.log.add("info", "Agent Online",
+                     "Vigil agent started — monitoring %d service(s)." % len(self.services),
+                     kind="status")
         interval = self.cfg.get("poll_interval_seconds", 30)
         while not self._stop.is_set():
             try:
                 self._poll_once()
-            except Exception as e:  # never let the loop die
-                self.log.add("warn", "Monitor Error", str(e))
+            except Exception as e:
+                self.log.add("warn", "Monitor Error", str(e), kind="status")
             self._stop.wait(interval)
 
 
@@ -199,24 +383,23 @@ class WebhookPusher(threading.Thread):
                 payload = json.dumps(new).encode("utf-8")
                 req = urllib.request.Request(
                     url, data=payload, method="POST",
-                    headers={"Content-Type": "application/json", "User-Agent": "vigil-agent/1.0"},
-                )
+                    headers={"Content-Type": "application/json", "User-Agent": "vigil-agent/1.1"})
                 try:
                     urllib.request.urlopen(req, timeout=self.cfg.get("request_timeout_seconds", 5))
                     self._seen = len(events)
                 except Exception:
-                    pass  # retry the same batch next tick
+                    pass
             self._stop.wait(min(self.cfg.get("poll_interval_seconds", 30), 10))
 
 
-def make_handler(config, log):
+def make_handler(config, log, monitor):
     token = (config.get("auth_token") or "").strip()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "VigilAgent/1.0"
+        server_version = "VigilAgent/1.1"
 
         def log_message(self, *args):
-            pass  # quiet by default
+            pass
 
         def _cors(self):
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -235,13 +418,10 @@ def make_handler(config, log):
         def _authorized(self):
             if not token:
                 return True
-            # Accept ?token= or Authorization: Bearer
-            from urllib.parse import urlparse, parse_qs
             q = parse_qs(urlparse(self.path).query)
             if q.get("token", [""])[0] == token:
                 return True
-            auth = self.headers.get("Authorization", "")
-            return auth == "Bearer " + token
+            return self.headers.get("Authorization", "") == "Bearer " + token
 
         def do_OPTIONS(self):
             self.send_response(204)
@@ -254,6 +434,10 @@ def make_handler(config, log):
                 if not self._authorized():
                     return self._json(401, {"error": "unauthorized"})
                 return self._json(200, log.snapshot())
+            if path == "/status":
+                if not self._authorized():
+                    return self._json(401, {"error": "unauthorized"})
+                return self._json(200, monitor.status_snapshot())
             if path == "/health":
                 return self._json(200, {"status": "ok", "time": now_iso()})
             return self._json(404, {"error": "not found"})
@@ -265,8 +449,7 @@ def load_config(path):
     cfg = dict(DEFAULT_CONFIG)
     if path and os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            user = json.load(f)
-        cfg.update(user)
+            cfg.update(json.load(f))
     return cfg
 
 
@@ -281,7 +464,6 @@ def main():
         cfg["bind_port"] = args.port
 
     log = EventLog(cfg.get("event_buffer_size", 200))
-
     monitor = Monitor(cfg, log)
     monitor.start()
 
@@ -292,14 +474,14 @@ def main():
 
     host = cfg.get("bind_host", "0.0.0.0")
     port = int(cfg.get("bind_port", 8787))
-    httpd = ThreadingHTTPServer((host, port), make_handler(cfg, log))
+    httpd = ThreadingHTTPServer((host, port), make_handler(cfg, log, monitor))
 
-    print("Vigil agent listening on http://{}:{}/events".format(host, port))
+    print("Vigil agent listening on http://{}:{}".format(host, port))
+    print("  /events  rolling event log   /status  live per-service codes + flags")
     print("Monitoring {} service(s) every {}s".format(
         len(cfg.get("services", [])), cfg.get("poll_interval_seconds", 30)))
     if cfg.get("webhook_url"):
         print("Pushing events to webhook: {}".format(cfg["webhook_url"]))
-    print("Point the dashboard's webhook box at this /events URL (or your relay).")
 
     try:
         httpd.serve_forever()
