@@ -137,6 +137,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
   padding:10px 20px;border-radius:6px;font-size:.72rem;font-family:var(--font);cursor:pointer;font-weight:700;white-space:nowrap}
 .scan-btn:hover{background:rgba(0,229,255,.25)}
 .scan-btn:disabled{opacity:.4;cursor:not-allowed}
+.agent-step{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;background:rgba(0,229,255,.04);border-radius:8px;border:1px solid rgba(0,229,255,.1)}
+.agent-step-num{width:22px;height:22px;flex-shrink:0;border-radius:50%;background:rgba(0,229,255,.15);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:var(--accent)}
+.agent-step-t{font-size:.72rem;font-weight:700;margin-bottom:2px}
+.agent-step-t code,.agent-step-d code{font-size:.64rem;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;color:var(--accent)}
+.agent-step-d{font-size:.62rem;color:var(--muted);line-height:1.5}
+.step-cmd{display:block;margin-top:5px;background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:5px;
+  padding:6px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.6rem;color:var(--ok);overflow-x:auto;white-space:nowrap}
+.agent-btn{padding:8px 14px;border-radius:6px;font-size:.68rem;font-family:var(--font);cursor:pointer;font-weight:700;white-space:nowrap;border:1px solid}
+.agent-btn.go{background:rgba(0,229,255,.15);border-color:rgba(0,229,255,.35);color:var(--accent)}
+.agent-btn.stop{background:rgba(255,45,85,.12);border-color:rgba(255,45,85,.35);color:var(--crit)}
 </style>
 </head>
 <body>
@@ -256,22 +266,36 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
         <span class="badge info">3 STEPS</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:7px">
-        <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 12px;background:rgba(0,229,255,.04);border-radius:8px;border:1px solid rgba(0,229,255,.1)">
-          <div style="width:22px;height:22px;flex-shrink:0;border-radius:50%;background:rgba(0,229,255,.15);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:var(--accent)">1</div>
-          <div><div style="font-size:.72rem;font-weight:700;margin-bottom:2px">Deploy beacon on intranet server</div><div style="font-size:.62rem;color:var(--muted)">Run the bundled <code>agent/vigil_agent.py</code> (zero-dependency Python) &mdash; or Wazuh / Prometheus Node Exporter</div></div>
+        <div class="agent-step">
+          <div class="agent-step-num">1</div>
+          <div style="flex:1;min-width:0">
+            <div class="agent-step-t">Run the agent on an intranet host</div>
+            <div class="agent-step-d">Copy the repo's <code>agent/</code> folder to any box that can reach your services. Zero dependencies &mdash; just Python 3:</div>
+            <code class="step-cmd">cp config.example.json config.json &amp;&amp; python3 vigil_agent.py --config config.json</code>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 12px;background:rgba(0,229,255,.04);border-radius:8px;border:1px solid rgba(0,229,255,.1)">
-          <div style="width:22px;height:22px;flex-shrink:0;border-radius:50%;background:rgba(0,229,255,.15);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:var(--accent)">2</div>
-          <div><div style="font-size:.72rem;font-weight:700;margin-bottom:2px">POST events to a public webhook</div><div style="font-size:.62rem;color:var(--muted)">Free: Pipedream, Make.com, or a Cloudflare Worker you control</div></div>
+        <div class="agent-step">
+          <div class="agent-step-num">2</div>
+          <div style="flex:1;min-width:0">
+            <div class="agent-step-t">Expose its <code>/events</code> endpoint</div>
+            <div class="agent-step-d">Easiest &mdash; a Cloudflare Tunnel (no inbound ports; gives a public HTTPS URL). The agent already sends CORS headers:</div>
+            <code class="step-cmd">cloudflared tunnel --url http://localhost:8787</code>
+            <div class="agent-step-d" style="margin-top:5px">Alternative: set <code>webhook_url</code> in the config to PUSH events to a relay you control (Cloudflare Worker / Pipedream), then use that relay's read URL.</div>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 12px;background:rgba(0,229,255,.04);border-radius:8px;border:1px solid rgba(0,229,255,.1)">
-          <div style="width:22px;height:22px;flex-shrink:0;border-radius:50%;background:rgba(0,229,255,.15);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:var(--accent)">3</div>
-          <div><div style="font-size:.72rem;font-weight:700;margin-bottom:2px">Paste your webhook URL below</div><div style="font-size:.62rem;color:var(--muted)">This dashboard polls it every 10s and streams events live into the feed above</div></div>
+        <div class="agent-step">
+          <div class="agent-step-num">3</div>
+          <div style="flex:1;min-width:0">
+            <div class="agent-step-t">Paste the URL below &amp; Connect</div>
+            <div class="agent-step-d">The dashboard polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed above.</div>
+          </div>
         </div>
         <div style="display:flex;gap:6px;margin-top:4px">
-          <input id="webhook-url" placeholder="https://your-webhook-url.com/events" style="flex:1;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:.68rem;font-family:var(--font);outline:none" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
-          <button onclick="connectWebhook()" style="background:rgba(0,229,255,.15);border:1px solid rgba(0,229,255,.35);color:var(--accent);padding:8px 14px;border-radius:6px;font-size:.68rem;font-family:var(--font);cursor:pointer;font-weight:700;white-space:nowrap">Connect</button>
+          <input id="webhook-url" placeholder="https://&lt;your-tunnel&gt;.trycloudflare.com/events" style="flex:1;min-width:0;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:.68rem;font-family:var(--font);outline:none" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter')connectWebhook()">
+          <button id="agent-connect-btn" class="agent-btn go" onclick="connectWebhook()">Connect</button>
+          <button id="agent-disconnect-btn" class="agent-btn stop" style="display:none" onclick="disconnectWebhook()">Stop</button>
         </div>
+        <div id="agent-conn-status" style="font-size:.6rem;color:var(--muted);min-height:.8rem;margin-top:2px"></div>
       </div>
     </div>
   </div>
@@ -525,31 +549,79 @@ async function runAllChecks(){
 
 
 let webhookInterval = null;
+let seenEventKeys = new Set();
+
+function setConnStatus(msg,color){
+  const el=document.getElementById('agent-conn-status');
+  if(el){el.innerHTML=msg;el.style.color=color||'var(--muted)';}
+}
+function setAgentBadge(cls,text){
+  const b=document.getElementById('agent-badge');
+  b.className='badge '+cls;b.textContent=text;
+}
+
+function disconnectWebhook(){
+  if(webhookInterval){clearInterval(webhookInterval);webhookInterval=null;}
+  agentConnected=false;
+  document.getElementById('agent-connect-btn').style.display='';
+  document.getElementById('agent-disconnect-btn').style.display='none';
+  setAgentBadge('warn','AGENT DISCONNECTED');
+  setConnStatus('Stopped polling. The live browser probe above is still active.','var(--warn)');
+  addEvent('info','Agent Disconnected','Stopped polling the agent endpoint.');
+}
+
 function connectWebhook(){
-  const url = document.getElementById('webhook-url').value.trim();
-  if(!url){alert('Please enter a webhook URL');return;}
-  document.getElementById('agent-badge').className='badge info';
-  document.getElementById('agent-badge').textContent='CONNECTING...';
-  addEvent('info','Webhook Connecting','Polling '+url+' every 10s for intranet events...');
+  const url=document.getElementById('webhook-url').value.trim();
+  if(!url){setConnStatus('Enter the agent <code>/events</code> URL first.','var(--warn)');return;}
+  if(!/^https?:\/\//i.test(url)){setConnStatus('URL must start with http:// or https://','var(--warn)');return;}
+  document.getElementById('agent-connect-btn').style.display='none';
+  document.getElementById('agent-disconnect-btn').style.display='';
+  setAgentBadge('info','CONNECTING…');
+  setConnStatus('Connecting to '+url+' …');
+  addEvent('info','Agent Connecting','Polling '+url+' every 10s for intranet events…');
   if(webhookInterval)clearInterval(webhookInterval);
+  seenEventKeys=new Set();
+
   async function poll(){
+    let r;
     try{
-      const r=await fetch(url);
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const data=await r.json();
-      const events=Array.isArray(data)?data:[data];
-      events.forEach(e=>{
-        addEvent(e.type||'info',e.title||'Intranet Event',e.message||JSON.stringify(e));
-      });
-      agentConnected=true;
-      document.getElementById('agent-badge').className='badge ok';
-      document.getElementById('agent-badge').textContent='AGENT CONNECTED';
+      r=await fetch(url,{cache:'no-store'});
     }catch(err){
       agentConnected=false;
-      addEvent('warn','Webhook Poll Failed',err.message);
-      document.getElementById('agent-badge').className='badge crit';
-      document.getElementById('agent-badge').textContent='POLL ERROR';
+      setAgentBadge('crit','UNREACHABLE');
+      setConnStatus('Cannot reach endpoint (network or CORS). Check the agent is running and the URL is publicly reachable.','var(--crit)');
+      addEvent('crit','Agent Unreachable','Could not reach '+url+' — verify the tunnel/agent and that CORS is allowed.');
+      return;
     }
+    if(!r.ok){
+      agentConnected=false;
+      setAgentBadge('crit','HTTP '+r.status);
+      setConnStatus('Endpoint returned HTTP '+r.status+'.','var(--crit)');
+      addEvent('crit','Agent HTTP Error',url+' returned HTTP '+r.status);
+      return;
+    }
+    let data;
+    try{data=await r.json();}
+    catch(_){
+      agentConnected=false;
+      setAgentBadge('crit','BAD JSON');
+      setConnStatus('Response was not valid JSON. Expected an array of {type,title,message}.','var(--crit)');
+      addEvent('crit','Agent Bad Response',url+' did not return JSON.');
+      return;
+    }
+    const events=Array.isArray(data)?data:[data];
+    let added=0;
+    events.forEach(e=>{
+      if(!e||typeof e!=='object')return;
+      const key=(e.ts||'')+'|'+(e.time||'')+'|'+(e.title||'')+'|'+(e.message||'');
+      if(seenEventKeys.has(key))return;
+      seenEventKeys.add(key);
+      addEvent(e.type||'info',e.title||'Intranet Event',e.message||JSON.stringify(e));
+      added++;
+    });
+    agentConnected=true;
+    setAgentBadge('ok','AGENT CONNECTED');
+    setConnStatus('Connected · '+events.length+' in buffer · '+added+' new · last poll '+new Date().toLocaleTimeString(),'var(--ok)');
   }
   poll();
   webhookInterval=setInterval(poll,10000);
