@@ -17,7 +17,28 @@ intranet services  ──►  vigil_agent.py  ──►  /events (JSON)  ──�
 - **You own the data path.** Events never leave your infrastructure unless you
   explicitly set a `webhook_url`.
 
-## Quick start
+## One-click setup (easiest)
+
+On any machine inside your network, paste a single command. It downloads the
+agent, opens a free Cloudflare quick tunnel (no account), and reopens the
+dashboard already connected — nothing to configure:
+
+```bash
+# macOS / Linux
+curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex
+```
+
+The script prints (and opens) a link like
+`https://vigil.kneuralabs.com/?agent=https://<tunnel>.trycloudflare.com/events`
+— the dashboard reads that `?agent=` parameter and connects automatically.
+Keep the terminal window open; press Ctrl+C to stop monitoring.
+
+## Quick start (manual)
 
 ```bash
 cd agent
