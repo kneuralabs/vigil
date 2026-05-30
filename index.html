@@ -228,7 +228,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
   <div class="panel" style="border-color:rgba(255,107,53,.25)">
     <div class="panel-hdr">
       <div class="panel-title"><span class="dot" style="background:var(--warn)"></span>Intranet Agent Status</div>
-      <span class="badge warn" id="agent-badge">NOT CONNECTED</span>
+      <span class="badge info" id="agent-badge">AWAITING SCAN</span>
     </div>
     <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2);border-radius:10px;margin-bottom:14px">
       <div style="width:44px;height:44px;flex-shrink:0;border-radius:50%;border:2px dashed rgba(255,107,53,.4);display:flex;align-items:center;justify-content:center;font-size:1.3rem;animation:spin 6s linear infinite">&#x1F4E1;</div>
@@ -292,6 +292,41 @@ function hostFromUrl(raw){
   let h=raw.trim();
   try{h=new URL(h).host;}catch(_){h=h.replace(/^[a-z]+:\/\//i,'').split('/')[0];}
   return h.replace(/^www\./i,'');
+}
+
+// Intranet service endpoints swept by the live reachability report.
+const INTRANET_SERVICES=[
+  {name:'Intranet Root',     path:'',          icon:'&#x1F310;'},
+  {name:'SSO / Auth Portal', path:'/auth',     icon:'&#x1F465;'},
+  {name:'HR System',         path:'/hr',       icon:'&#x1F4C1;'},
+  {name:'Dev Tools',         path:'/dev',      icon:'&#x1F527;'},
+  {name:'File Storage',      path:'/files',    icon:'&#x1F4BE;'},
+  {name:'Analytics',         path:'/analytics',icon:'&#x1F4CA;'},
+  {name:'VPN Gateway',       path:'/vpn',      icon:'&#x1F511;'},
+  {name:'API Gateway',       path:'/api',      icon:'&#x26A1;'}
+];
+// True once the agent webhook is delivering events (keeps the badge honest).
+let agentConnected=false;
+
+// Single no-cors reachability probe with timeout. Returns {ok, ms, why}.
+async function probeOne(url,timeoutMs){
+  const start=performance.now();
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),timeoutMs||6000);
+  try{
+    await fetch(url,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
+    clearTimeout(t);
+    return {ok:true,ms:Math.round(performance.now()-start)};
+  }catch(e){
+    clearTimeout(t);
+    return {ok:false,ms:Math.round(performance.now()-start),why:e.name==='AbortError'?'timeout':'unreachable'};
+  }
+}
+
+function intranetRow(icon,name,sub,cls,label){
+  return '<div class="alarm"><span class="alarm-icon">'+icon+'</span>'+
+    '<div class="alarm-body"><strong>'+name+'</strong><p>'+sub+'</p></div>'+
+    '<span class="badge '+cls+'">'+label+'</span></div>';
 }
 
 function addEvent(type,title,msg){
@@ -411,36 +446,58 @@ async function checkIntranet(){
   const raw=document.getElementById('intranet-url-input').value.trim();
   const titleEl=document.getElementById('intranet-probe-title');
   const noteEl=document.getElementById('intranet-probe-note');
+  const badge=document.getElementById('agent-badge');
   if(!raw){
     probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px">No Intranet URL entered.</div>';
     setCard('intranet','warn','&#x1F512;','No URL');
+    if(!agentConnected){badge.className='badge warn';badge.textContent='NO URL';}
     return;
   }
   const host=hostFromUrl(raw);
   document.getElementById('intranet-domain-label').textContent=host;
-  addEvent('info','Intranet Probe','Testing live reachability of '+raw+' from your browser...');
-  const start=performance.now();
-  const ctrl=new AbortController();
-  const timer=setTimeout(()=>ctrl.abort(),6000);
-  try{
-    await fetch(raw,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
-    clearTimeout(timer);
-    const ms=Math.round(performance.now()-start);
-    titleEl.textContent='Host Responded';titleEl.style.color='var(--ok)';
-    noteEl.innerHTML='<strong style="color:var(--ok)">'+host+'</strong> is reachable from this browser ('+ms+' ms). Response body is opaque under CORS; connect the agent below for per-service detail.';
-    probe.innerHTML='<div class="alarm"><span class="alarm-icon">&#x1F310;</span><div class="alarm-body"><strong>'+host+'</strong><p>'+raw+'</p></div><span class="badge ok">REACHABLE</span></div>';
-    setCard('intranet','ok','UP','Reachable ('+ms+'ms)');
-    addEvent('ok','Intranet Reachable',host+' responded in '+ms+'ms');
-  }catch(e){
-    clearTimeout(timer);
-    const ms=Math.round(performance.now()-start);
-    const why=e.name==='AbortError'?'timed out after 6s':'network error (private host or DNS not public)';
-    titleEl.textContent='Not Reachable From Browser';titleEl.style.color='var(--warn)';
-    noteEl.innerHTML='<strong style="color:var(--warn)">'+host+'</strong> could not be reached directly &mdash; '+why+'. This is expected for a private network. Connect the agent below to stream live internal status.';
-    probe.innerHTML='<div class="alarm"><span class="alarm-icon">&#x1F512;</span><div class="alarm-body"><strong>'+host+'</strong><p>'+raw+' &middot; '+why+'</p></div><span class="badge warn">PRIVATE</span></div>';
-    setCard('intranet','warn','PRIV','Use agent feed');
-    addEvent('warn','Intranet Not Reachable',host+' is not directly reachable ('+why+'). Use the agent feed below.');
+  let base;
+  try{base=new URL(raw).origin;}
+  catch(_){try{base=new URL('https://'+raw).origin;}catch(__){base='https://'+host;}}
+
+  // Probing state.
+  titleEl.textContent='Probing '+INTRANET_SERVICES.length+' services…';titleEl.style.color='var(--accent)';
+  noteEl.innerHTML='Running live reachability probes against <strong>'+host+'</strong> endpoints from your browser…';
+  probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px"><span class="spinner"></span>Sweeping '+INTRANET_SERVICES.length+' endpoints…</div>';
+  if(!agentConnected){badge.className='badge info';badge.textContent='SCANNING…';}
+  addEvent('info','Intranet Sweep','Probing '+INTRANET_SERVICES.length+' '+host+' endpoints from your browser…');
+
+  // Probe every endpoint in parallel.
+  const results=await Promise.all(INTRANET_SERVICES.map(async svc=>{
+    const url=base+svc.path;
+    const r=await probeOne(url,6000);
+    return Object.assign({url:url},svc,r);
+  }));
+
+  let up=0;
+  const rows=results.map(r=>{
+    const path=r.url.replace(/^https?:\/\//i,'');
+    if(r.ok){
+      up++;
+      const slow=r.ms>1500;
+      return intranetRow(r.icon,r.name,path+' &middot; '+r.ms+' ms',slow?'warn':'ok',slow?'SLOW':'REACHABLE');
+    }
+    return intranetRow(r.icon,r.name,path+' &middot; '+(r.why==='timeout'?'timed out (6s)':'no response')+' &middot; '+r.ms+' ms','crit',r.why==='timeout'?'TIMEOUT':'DOWN');
+  }).join('');
+  probe.innerHTML=rows;
+
+  const total=results.length;
+  const cls=up===total?'ok':(up===0?'crit':'warn');
+  titleEl.textContent=up+' / '+total+' endpoints reachable';
+  titleEl.style.color='var(--'+cls+')';
+  noteEl.innerHTML='Live browser probe of <strong>'+host+'</strong>. “Reachable” means the endpoint answered (HTTP status &amp; body are opaque cross-origin). For status codes, latency per route and logs, connect the agent below.';
+  setCard('intranet',cls,up+'/'+total,up+' reachable');
+
+  // Keep the panel header badge consistent with the report (unless the agent feed owns it).
+  if(!agentConnected){
+    badge.className='badge '+cls;
+    badge.textContent='LIVE PROBE · '+up+'/'+total+' UP';
   }
+  addEvent(cls,'Intranet Sweep Done',up+' of '+total+' '+host+' endpoints reachable');
 }
 
 async function runAllChecks(){
@@ -484,9 +541,11 @@ function connectWebhook(){
       events.forEach(e=>{
         addEvent(e.type||'info',e.title||'Intranet Event',e.message||JSON.stringify(e));
       });
+      agentConnected=true;
       document.getElementById('agent-badge').className='badge ok';
-      document.getElementById('agent-badge').textContent='CONNECTED';
+      document.getElementById('agent-badge').textContent='AGENT CONNECTED';
     }catch(err){
+      agentConnected=false;
       addEvent('warn','Webhook Poll Failed',err.message);
       document.getElementById('agent-badge').className='badge crit';
       document.getElementById('agent-badge').textContent='POLL ERROR';
