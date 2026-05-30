@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Vigil™</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -16,13 +16,14 @@
   --text:#e2e8f0;--muted:#4a5568;--pulse:rgba(0,229,255,.15);
   --font:'Inter',sans-serif;
 }
-body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body::before{content:'';position:fixed;inset:0;
   background:linear-gradient(rgba(0,229,255,.03) 1px,transparent 1px),
              linear-gradient(90deg,rgba(0,229,255,.03) 1px,transparent 1px);
   background-size:40px 40px;animation:gridShift 20s linear infinite;z-index:0}
 @keyframes gridShift{0%{background-position:0 0}100%{background-position:40px 40px}}
-.wrap{position:relative;z-index:1;padding:16px;max-width:1600px;margin:0 auto}
+.wrap{position:relative;z-index:1;padding:16px;max-width:1600px;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
 header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;
   background:rgba(10,15,30,.85);border:1px solid var(--border);border-radius:12px;
   backdrop-filter:blur(20px);margin-bottom:16px;flex-wrap:wrap;gap:10px}
@@ -123,8 +124,72 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .cors-note{padding:14px;background:rgba(255,107,53,.05);border:1px dashed rgba(255,107,53,.25);border-radius:8px;font-size:.68rem;line-height:1.6;color:var(--muted)}
 .cors-note a{color:var(--accent);text-decoration:none}
 .cors-note a:hover{text-decoration:underline}
-@media(max-width:600px){.stat-val{font-size:1.2rem}.panel-title{font-size:.7rem}header{padding:10px 14px}}
-@media(orientation:landscape)and(max-height:500px){.event-feed{max-height:160px}}
+/* ============ Responsive breakpoints ============ */
+/* Laptops / small desktops */
+@media(max-width:1280px){.wrap{padding:14px}.status-bar{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}}
+
+/* Tablets (landscape) and below: main panels go single column */
+@media(max-width:900px){
+  .main-grid{grid-template-columns:1fr}
+  .status-bar{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+  .panel{padding:14px}
+}
+
+/* Tablets portrait / large phones */
+@media(max-width:680px){
+  .wrap{padding:12px}
+  header{padding:10px 14px}
+  .config-bar{padding:12px;gap:10px}
+  .cfg-field{flex:1 1 100%;min-width:0}
+  .scan-btn{width:100%}
+  .status-bar{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat-val{font-size:1.3rem}
+  .panel-title{font-size:.72rem}
+  /* 16px input font stops iOS Safari from auto-zooming on focus */
+  .cfg-field input,#webhook-url{font-size:16px}
+}
+
+/* Phones portrait */
+@media(max-width:480px){
+  .wrap{padding:10px}
+  .logo-icon{width:34px;height:34px}
+  .logo h1{font-size:.95rem}
+  .logo span{font-size:.55rem;letter-spacing:.05em}
+  .hdr-right{gap:8px}
+  .stat-val{font-size:1.15rem}
+  .stat-card{padding:12px 13px}
+  .panel{padding:13px}
+  /* Stack the one-click command rows so long commands stay readable */
+  .cmd-row{flex-wrap:wrap}
+  .cmd-row .os{min-width:100%;margin-bottom:2px}
+  .cmd-row .step-cmd{flex:1 1 100%}
+  .copy-btn{flex:1 1 100%;padding:7px 10px}
+  /* Agent connect input + buttons stack */
+  #webhook-url{flex:1 1 100%}
+}
+
+/* Very small phones */
+@media(max-width:360px){
+  .status-bar{grid-template-columns:1fr}
+  .clock{display:none}
+}
+
+/* Landscape phones / short viewports: trim vertical chrome */
+@media(orientation:landscape)and(max-height:520px){
+  .event-feed{max-height:150px}
+  header{margin-bottom:10px}
+  .status-bar{margin-bottom:10px}
+  .main-grid{margin-bottom:10px}
+  body::before{display:none}
+}
+
+/* Large / hi-dpi desktops: let content breathe a touch more */
+@media(min-width:1700px){.status-bar{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}}
+
+/* Respect reduced-motion preference */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important}
+}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 .config-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:rgba(10,15,30,.85);
   border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;backdrop-filter:blur(20px)}
