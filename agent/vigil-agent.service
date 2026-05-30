@@ -1,0 +1,24 @@
+[Unit]
+Description=Vigil Intranet Monitoring Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust WorkingDirectory/ExecStart paths to where you deploy the agent.
+WorkingDirectory=/opt/vigil-agent
+ExecStart=/usr/bin/python3 /opt/vigil-agent/vigil_agent.py --config /opt/vigil-agent/config.json
+Restart=on-failure
+RestartSec=5
+# Run as an unprivileged user you create: `useradd -r -s /usr/sbin/nologin vigil`
+User=vigil
+Group=vigil
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/vigil-agent
+
+[Install]
+WantedBy=multi-user.target

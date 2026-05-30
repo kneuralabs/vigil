@@ -1,0 +1,20 @@
+{
+  "bind_host": "0.0.0.0",
+  "bind_port": 8787,
+  "poll_interval_seconds": 30,
+  "request_timeout_seconds": 5,
+  "slow_threshold_ms": 1500,
+  "event_buffer_size": 200,
+  "verify_tls": true,
+  "auth_token": "",
+  "webhook_url": "",
+  "services": [
+    { "name": "SSO / Auth Portal", "url": "https://intranet.kneuralabs.com/auth" },
+    { "name": "HR System",         "url": "https://intranet.kneuralabs.com/hr" },
+    { "name": "Dev Tools",         "url": "https://intranet.kneuralabs.com/dev" },
+    { "name": "File Storage",      "url": "https://intranet.kneuralabs.com/files" },
+    { "name": "Analytics",         "url": "https://intranet.kneuralabs.com/analytics" },
+    { "name": "VPN Gateway",       "url": "https://intranet.kneuralabs.com/vpn" },
+    { "name": "API Gateway",       "url": "https://intranet.kneuralabs.com/api" }
+  ]
+}
