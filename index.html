@@ -69,6 +69,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .sim-badge{font-size:.55rem;padding:2px 6px;border-radius:4px;background:rgba(255,107,53,.1);
   border:1px solid rgba(255,107,53,.3);color:var(--warn);letter-spacing:.05em;font-weight:700}
 .main-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.main-grid>*{min-width:0}
 @media(max-width:900px){.main-grid{grid-template-columns:1fr}}
 .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:hidden}
 .panel-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -99,9 +100,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .event.crit{border-color:var(--crit);background:rgba(255,45,85,.06)}
 .event.ok{border-color:var(--ok);background:rgba(0,255,157,.04)}
 .event-time{color:var(--muted);white-space:nowrap;margin-top:1px;font-size:.62rem;font-weight:500}
-.event-body{flex:1}
-.event-body strong{color:var(--text);font-weight:600;display:block;margin-bottom:1px;font-size:.7rem}
-.event-body p{color:var(--muted);font-size:.65rem}
+.event-body{flex:1;min-width:0}
+.event-body strong{color:var(--text);font-weight:600;display:block;margin-bottom:1px;font-size:.7rem;overflow-wrap:anywhere}
+.event-body p{color:var(--muted);font-size:.65rem;overflow-wrap:anywhere}
 .intranet-notice{display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:20px;text-align:center;gap:8px;background:rgba(255,107,53,.04);border:1px dashed rgba(255,107,53,.3);
   border-radius:10px;margin-bottom:10px}
@@ -111,11 +112,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .alarm-list{display:flex;flex-direction:column;gap:6px}
 .alarm{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
   background:rgba(255,255,255,.03);border:1px solid var(--border);transition:border-color .2s;font-size:.7rem}
+.alarm .badge{flex-shrink:0;white-space:nowrap}
 .alarm:hover{border-color:var(--accent)}
 .alarm-icon{font-size:.95rem;min-width:22px;text-align:center}
-.alarm-body{flex:1}
-.alarm-body strong{font-size:.7rem;font-weight:600;display:block}
-.alarm-body p{color:var(--muted);font-size:.62rem;margin-top:1px}
+.alarm-body{flex:1;min-width:0}
+.alarm-body strong{font-size:.7rem;font-weight:600;display:block;overflow-wrap:anywhere}
+.alarm-body p{color:var(--muted);font-size:.62rem;margin-top:1px;overflow-wrap:anywhere}
 .loading-skeleton{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);
   background-size:200%;animation:shimmer 1.5s infinite;border-radius:4px;height:32px;margin-bottom:5px}
 .spinner{display:inline-block;width:10px;height:10px;border:2px solid rgba(0,229,255,.2);
@@ -216,7 +218,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .oneclick h4{font-size:.74rem;font-weight:800;color:var(--ok);margin-bottom:3px}
 .oneclick p{font-size:.62rem;color:var(--muted);line-height:1.5;margin-bottom:8px}
 .cmd-row{display:flex;gap:6px;align-items:stretch;margin-bottom:6px}
-.cmd-row .step-cmd{flex:1;margin-top:0}
+.cmd-row .step-cmd{flex:1;min-width:0;margin-top:0}
 .cmd-row .os{font-size:.55rem;color:var(--muted);min-width:54px;display:flex;align-items:center;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .copy-btn{background:rgba(0,255,157,.12);border:1px solid rgba(0,255,157,.35);color:var(--ok);border-radius:5px;
   padding:0 10px;font-size:.58rem;font-family:var(--font);font-weight:700;cursor:pointer;white-space:nowrap}
@@ -227,6 +229,12 @@ details.manual>summary::-webkit-details-marker{display:none}
 details.manual>summary::before{content:'\25B8  '}
 details.manual[open]>summary::before{content:'\25BE  '}
 details.manual>div{margin-top:6px}
+/* Agent-connect status line can carry long URLs — keep it inside the panel */
+#agent-conn-status{overflow-wrap:anywhere}
+#intranet-probe-note,#intranet-probe-title{overflow-wrap:anywhere}
+/* The manual-setup step's code blocks scroll internally, never the page */
+.agent-step>div{min-width:0}
+.agent-step .step-cmd{max-width:100%}
 </style>
 </head>
 <body>
