@@ -3,355 +3,180 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#030712">
+<meta name="theme-color" content="#1c1a17">
 <meta name="description" content="Vigil — real-time SSL/TLS, DNS, certificate-transparency and intranet monitoring using free public APIs.">
-<title>Vigil™</title>
+<title>Vigil™ — Sentinel</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#030712;--surface:#0a0f1e;--card:#0e1628;--border:#1a2540;
-  --accent:#00e5ff;--warn:#ff6b35;--ok:#00ff9d;--crit:#ff2d55;
-  --text:#e2e8f0;--muted:#4a5568;--pulse:rgba(0,229,255,.15);
-  --font:'Inter',sans-serif;
-}
-body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body::before{content:'';position:fixed;inset:0;
-  background:linear-gradient(rgba(0,229,255,.03) 1px,transparent 1px),
-             linear-gradient(90deg,rgba(0,229,255,.03) 1px,transparent 1px);
-  background-size:40px 40px;animation:gridShift 20s linear infinite;z-index:0}
-@keyframes gridShift{0%{background-position:0 0}100%{background-position:40px 40px}}
-.wrap{position:relative;z-index:1;padding:16px;max-width:1600px;margin:0 auto;
-  padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;
-  background:rgba(10,15,30,.85);border:1px solid var(--border);border-radius:12px;
-  backdrop-filter:blur(20px);margin-bottom:16px;flex-wrap:wrap;gap:10px}
-.logo{display:flex;align-items:center;gap:10px}
-.logo-icon{width:40px;height:40px;border-radius:8px;overflow:hidden;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;animation:pulse 2s ease-in-out infinite}
-.logo-icon img{width:100%;height:100%;object-fit:contain;display:block}
-.logo h1 .tm{font-size:.55em;font-weight:700;vertical-align:super;margin-left:1px;color:var(--accent)}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--pulse)}50%{box-shadow:0 0 0 12px transparent}}
-.logo h1{font-size:1.05rem;font-weight:800;letter-spacing:-.02em}
-.logo span{font-size:.65rem;color:var(--muted);display:block;letter-spacing:.08em;margin-top:2px}
-.hdr-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.live-badge{display:flex;align-items:center;gap:6px;font-size:.7rem;color:var(--ok);font-weight:600}
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:blink 1s infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.clock{font-size:.72rem;color:var(--muted)}
-.refresh-btn{background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.3);color:var(--accent);
-  padding:5px 12px;border-radius:6px;font-size:.7rem;font-family:var(--font);cursor:pointer;
-  transition:all .2s;font-weight:600}
-.refresh-btn:hover{background:rgba(0,229,255,.2)}
-.refresh-btn:disabled{opacity:.4;cursor:not-allowed}
-.status-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
-.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;
-  position:relative;overflow:hidden;transition:border-color .3s,transform .2s}
-.stat-card:hover{transform:translateY(-2px);border-color:var(--accent)}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:2px 2px 0 0}
-.stat-card.ok::before{background:var(--ok)}
-.stat-card.warn::before{background:var(--warn)}
-.stat-card.crit::before{background:var(--crit);animation:critFlash .8s infinite}
-.stat-card.info::before{background:var(--accent)}
-.stat-card.loading::before{background:linear-gradient(90deg,var(--border),var(--accent),var(--border));background-size:200%;animation:shimmer 1.5s infinite}
-@keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
-@keyframes critFlash{0%,100%{opacity:1}50%{opacity:.3}}
-.stat-label{font-size:.62rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;font-weight:600}
-.stat-val{font-size:1.5rem;font-weight:800;line-height:1;letter-spacing:-.03em}
-.stat-sub{font-size:.62rem;color:var(--muted);margin-top:4px}
-.ok .stat-val{color:var(--ok)}.warn .stat-val{color:var(--warn)}.crit .stat-val{color:var(--crit)}.info .stat-val{color:var(--accent)}.loading .stat-val{color:var(--muted)}
-.section-label{font-size:.62rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;
-  margin-bottom:10px;display:flex;align-items:center;gap:8px;font-weight:600}
-.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
-.real-badge{font-size:.55rem;padding:2px 6px;border-radius:4px;background:rgba(0,255,157,.1);
-  border:1px solid rgba(0,255,157,.3);color:var(--ok);letter-spacing:.05em;font-weight:700}
-.sim-badge{font-size:.55rem;padding:2px 6px;border-radius:4px;background:rgba(255,107,53,.1);
-  border:1px solid rgba(255,107,53,.3);color:var(--warn);letter-spacing:.05em;font-weight:700}
-.main-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-.main-grid>*{min-width:0}
-@media(max-width:900px){.main-grid{grid-template-columns:1fr}}
-.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:hidden}
-.panel-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.panel-title{font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
-.panel-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
-.badge{font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:20px;border:1px solid}
-.badge.ok{color:var(--ok);border-color:var(--ok);background:rgba(0,255,157,.08)}
-.badge.warn{color:var(--warn);border-color:var(--warn);background:rgba(255,107,53,.08)}
-.badge.crit{color:var(--crit);border-color:var(--crit);background:rgba(255,45,85,.08)}
-.badge.info{color:var(--accent);border-color:var(--accent);background:rgba(0,229,255,.08)}
-.cert-info{display:flex;flex-direction:column;gap:5px}
-.cert-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;
-  background:rgba(255,255,255,.03);border-radius:6px;font-size:.7rem}
-.cert-key{color:var(--muted);font-size:.65rem;font-weight:500}
-.cert-val{font-size:.68rem;font-weight:600}
-.cert-val.ok{color:var(--ok)}.cert-val.warn{color:var(--warn)}.cert-val.crit{color:var(--crit)}
-.dns-list{display:flex;flex-direction:column;gap:5px}
-.dns-row{display:flex;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;font-size:.68rem;align-items:flex-start}
-.dns-type{color:var(--accent);font-weight:700;min-width:38px;font-size:.62rem}
-.dns-val{color:var(--text);word-break:break-all;opacity:.85}
-.event-feed{max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.event{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:4px;
-  border-left:2px solid;animation:slideIn .3s ease forwards;opacity:0;font-size:.7rem;transition:background .2s}
-.event:hover{background:rgba(255,255,255,.03)}
-@keyframes slideIn{from{transform:translateX(-8px);opacity:0}to{transform:translateX(0);opacity:1}}
-.event.info{border-color:var(--accent);background:rgba(0,229,255,.04)}
-.event.warn{border-color:var(--warn);background:rgba(255,107,53,.04)}
-.event.crit{border-color:var(--crit);background:rgba(255,45,85,.06)}
-.event.ok{border-color:var(--ok);background:rgba(0,255,157,.04)}
-.event-time{color:var(--muted);white-space:nowrap;margin-top:1px;font-size:.62rem;font-weight:500}
-.event-body{flex:1;min-width:0}
-.event-body strong{color:var(--text);font-weight:600;display:block;margin-bottom:1px;font-size:.7rem;overflow-wrap:anywhere}
-.event-body p{color:var(--muted);font-size:.65rem;overflow-wrap:anywhere}
-.alarm-list{display:flex;flex-direction:column;gap:6px}
-.alarm{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
-  background:rgba(255,255,255,.03);border:1px solid var(--border);transition:border-color .2s;font-size:.7rem}
-.alarm .badge{flex-shrink:0;white-space:nowrap}
-.alarm:hover{border-color:var(--accent)}
-.alarm-icon{font-size:.95rem;min-width:22px;text-align:center}
-.alarm-body{flex:1;min-width:0}
-.alarm-body strong{font-size:.7rem;font-weight:600;display:block;overflow-wrap:anywhere}
-.alarm-body p{color:var(--muted);font-size:.62rem;margin-top:1px;overflow-wrap:anywhere}
-.loading-skeleton{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);
-  background-size:200%;animation:shimmer 1.5s infinite;border-radius:4px;height:32px;margin-bottom:5px}
-.spinner{display:inline-block;width:10px;height:10px;border:2px solid rgba(0,229,255,.2);
-  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.cors-note{padding:14px;background:rgba(255,107,53,.05);border:1px dashed rgba(255,107,53,.25);border-radius:8px;font-size:.68rem;line-height:1.6;color:var(--muted)}
-.cors-note a{color:var(--accent);text-decoration:none}
-.cors-note a:hover{text-decoration:underline}
-/* ============ Responsive breakpoints ============ */
-/* Laptops / small desktops */
-@media(max-width:1280px){.wrap{padding:14px}.status-bar{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}}
-
-/* Tablets (landscape) and below: main panels go single column */
-@media(max-width:900px){
-  .main-grid{grid-template-columns:1fr}
-  .status-bar{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
-  .panel{padding:14px}
-}
-
-/* Tablets portrait / large phones */
-@media(max-width:680px){
-  .wrap{padding:12px}
-  header{padding:10px 14px}
-  .config-bar{padding:12px;gap:10px}
-  .cfg-field{flex:1 1 100%;min-width:0}
-  .scan-btn{width:100%}
-  .status-bar{grid-template-columns:repeat(2,1fr);gap:8px}
-  .stat-val{font-size:1.3rem}
-  .panel-title{font-size:.72rem}
-  /* 16px input font stops iOS Safari from auto-zooming on focus */
-  .cfg-field input,#webhook-url{font-size:16px}
-}
-
-/* Phones portrait */
-@media(max-width:480px){
-  .wrap{padding:10px}
-  .logo-icon{width:34px;height:34px}
-  .logo h1{font-size:.95rem}
-  .logo span{font-size:.55rem;letter-spacing:.05em}
-  .hdr-right{gap:8px}
-  .stat-val{font-size:1.15rem}
-  .stat-card{padding:12px 13px}
-  .panel{padding:13px}
-  /* Stack the one-click command rows so long commands stay readable */
-  .cmd-row{flex-wrap:wrap}
-  .cmd-row .os{min-width:100%;margin-bottom:2px}
-  .cmd-row .step-cmd{flex:1 1 100%}
-  .copy-btn{flex:1 1 100%;padding:7px 10px}
-  /* Agent connect input + buttons stack */
-  #webhook-url{flex:1 1 100%}
-}
-
-/* Very small phones */
-@media(max-width:360px){
-  .status-bar{grid-template-columns:1fr}
-  .clock{display:none}
-}
-
-/* Landscape phones / short viewports: trim vertical chrome */
-@media(orientation:landscape)and(max-height:520px){
-  .event-feed{max-height:150px}
-  header{margin-bottom:10px}
-  .status-bar{margin-bottom:10px}
-  .main-grid{margin-bottom:10px}
-  body::before{display:none}
-}
-
-/* Large / hi-dpi desktops: let content breathe a touch more */
-@media(min-width:1700px){.status-bar{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}}
-
-/* Respect reduced-motion preference */
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important}
-}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
-.config-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:rgba(10,15,30,.85);
-  border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;backdrop-filter:blur(20px)}
-.cfg-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:220px}
-.cfg-field label{font-size:.6rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;font-weight:600}
-.cfg-field input{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;
-  padding:9px 11px;color:var(--text);font-size:.72rem;font-family:var(--font);outline:none;transition:border-color .2s;width:100%}
-.cfg-field input:focus{border-color:var(--accent)}
-.scan-btn{background:rgba(0,229,255,.15);border:1px solid rgba(0,229,255,.35);color:var(--accent);
-  padding:10px 20px;border-radius:6px;font-size:.72rem;font-family:var(--font);cursor:pointer;font-weight:700;white-space:nowrap}
-.scan-btn:hover{background:rgba(0,229,255,.25)}
-.scan-btn:disabled{opacity:.4;cursor:not-allowed}
-.agent-step{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;background:rgba(0,229,255,.04);border-radius:8px;border:1px solid rgba(0,229,255,.1)}
-.agent-step-num{width:22px;height:22px;flex-shrink:0;border-radius:50%;background:rgba(0,229,255,.15);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:var(--accent)}
-.agent-step-t{font-size:.72rem;font-weight:700;margin-bottom:2px}
-.agent-step-t code,.agent-step-d code{font-size:.64rem;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;color:var(--accent)}
-.agent-step-d{font-size:.62rem;color:var(--muted);line-height:1.5}
-.step-cmd{display:block;margin-top:5px;background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:5px;
-  padding:6px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.6rem;color:var(--ok);overflow-x:auto;white-space:nowrap}
-.agent-btn{padding:8px 14px;border-radius:6px;font-size:.68rem;font-family:var(--font);cursor:pointer;font-weight:700;white-space:nowrap;border:1px solid}
-.agent-btn.go{background:rgba(0,229,255,.15);border-color:rgba(0,229,255,.35);color:var(--accent)}
-.agent-btn.stop{background:rgba(255,45,85,.12);border-color:rgba(255,45,85,.35);color:var(--crit)}
-.oneclick{background:rgba(0,255,157,.06);border:1px solid rgba(0,255,157,.3);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-.oneclick h4{font-size:.74rem;font-weight:800;color:var(--ok);margin-bottom:3px}
-.oneclick p{font-size:.62rem;color:var(--muted);line-height:1.5;margin-bottom:8px}
-.cmd-row{display:flex;gap:6px;align-items:stretch;margin-bottom:6px}
-.cmd-row .step-cmd{flex:1;min-width:0;margin-top:0}
-.cmd-row .os{font-size:.55rem;color:var(--muted);min-width:54px;display:flex;align-items:center;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.copy-btn{background:rgba(0,255,157,.12);border:1px solid rgba(0,255,157,.35);color:var(--ok);border-radius:5px;
-  padding:0 10px;font-size:.58rem;font-family:var(--font);font-weight:700;cursor:pointer;white-space:nowrap}
-.copy-btn:hover{background:rgba(0,255,157,.22)}
-details.manual{margin-top:2px}
-details.manual>summary{font-size:.62rem;color:var(--accent);cursor:pointer;font-weight:600;list-style:none;padding:4px 0;outline:none}
-details.manual>summary::-webkit-details-marker{display:none}
-details.manual>summary::before{content:'\25B8  '}
-details.manual[open]>summary::before{content:'\25BE  '}
-details.manual>div{margin-top:6px}
-/* Agent-connect status line can carry long URLs — keep it inside the panel */
-#agent-conn-status{overflow-wrap:anywhere}
-#intranet-probe-note,#intranet-probe-title{overflow-wrap:anywhere}
-/* The manual-setup step's code blocks scroll internally, never the page */
-.agent-step>div{min-width:0}
-.agent-step .step-cmd{max-width:100%}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="wrap">
 
-<header>
-  <div class="logo">
-    <div class="logo-icon"><img src="LOGO.png" alt="Vigil logo"></div>
-    <div>
-      <h1>Vigil<sup class="tm">&trade;</sup></h1>
-      <span>REAL-TIME &middot; SSL &middot; DNS &middot; CERT TRANSPARENCY &middot; FREE PUBLIC APIs</span>
-    </div>
-  </div>
-  <div class="hdr-right">
-    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
-    <div class="clock" id="clock">Loading...</div>
-    <button class="refresh-btn" id="refresh-btn" onclick="runAllChecks()">&#x21BB; Refresh All</button>
-  </div>
-</header>
-
-<div class="config-bar">
-  <div class="cfg-field">
-    <label>Public Website URL</label>
-    <input id="public-url" type="text" placeholder="https://www.example.com" value="https://www.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
-  </div>
-  <div class="cfg-field">
-    <label>Intranet URL</label>
-    <input id="intranet-url-input" type="text" placeholder="https://intranet.example.com" value="https://intranet.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
-  </div>
-  <button class="scan-btn" id="scan-btn" onclick="runAllChecks()">&#x25B6; Scan</button>
-</div>
-
-<div class="status-bar">
-  <div class="stat-card loading" id="card-ssl"><div class="stat-label">Cert Days Left</div><div class="stat-val" id="val-ssl">...</div><div class="stat-sub" id="sub-ssl">Checking crt.sh</div></div>
-  <div class="stat-card loading" id="card-dns"><div class="stat-label">DNS Status</div><div class="stat-val" id="val-dns">...</div><div class="stat-sub" id="sub-dns">Google DoH</div></div>
-  <div class="stat-card loading" id="card-certs"><div class="stat-label">CT Log Entries</div><div class="stat-val" id="val-certs">...</div><div class="stat-sub" id="sub-certs">crt.sh database</div></div>
-  <div class="stat-card loading" id="card-issuer"><div class="stat-label">Issuer</div><div class="stat-val" id="val-issuer" style="font-size:.9rem">...</div><div class="stat-sub" id="sub-issuer">Certificate CA</div></div>
-  <div class="stat-card loading" id="card-mx"><div class="stat-label">Mail (MX)</div><div class="stat-val" id="val-mx">...</div><div class="stat-sub" id="sub-mx">DNS MX record</div></div>
-  <div class="stat-card warn" id="card-intranet"><div class="stat-label">Intranet</div><div class="stat-val" id="val-intranet" style="font-size:1.1rem">&#x1F512;</div><div class="stat-sub" id="sub-intranet">Awaiting probe</div></div>
-</div>
-
-<div class="section-label">01 &middot; LIVE &middot; <span id="public-domain-label">kneuralabs.com</span> <span class="real-badge">REAL DATA via free APIs</span></div>
-<div class="main-grid">
-
-  <div class="panel">
-    <div class="panel-hdr">
-      <div class="panel-title"><span class="dot"></span>SSL / TLS Certificate (crt.sh)</div>
-      <span class="badge info" id="ssl-badge"><span class="spinner"></span>Loading</span>
-    </div>
-    <div id="ssl-details"><div class="loading-skeleton"></div><div class="loading-skeleton"></div><div class="loading-skeleton"></div></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-hdr">
-      <div class="panel-title"><span class="dot" style="background:var(--ok)"></span>DNS Records (Google DoH)</div>
-      <span class="badge info" id="dns-badge"><span class="spinner"></span>Resolving</span>
-    </div>
-    <div class="dns-list" id="dns-details"><div class="loading-skeleton"></div><div class="loading-skeleton"></div></div>
-  </div>
-</div>
-
-<div class="main-grid">
-  <div class="panel">
-    <div class="panel-hdr">
-      <div class="panel-title"><span class="dot" style="background:var(--accent)"></span>Certificate Transparency Log (crt.sh)</div>
-      <span class="badge info" id="crt-badge"><span class="spinner"></span>Fetching</span>
-    </div>
-    <div id="crt-details"><div class="loading-skeleton"></div><div class="loading-skeleton"></div></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-hdr">
-      <div class="panel-title"><span class="dot" style="background:var(--warn)"></span>Security Headers Check</div>
-      <span class="badge warn">CORS LIMITED</span>
-    </div>
-    <div class="cors-note">
-      Browsers block cross-origin response header inspection (CORS policy). This is <strong style="color:var(--ok)">correct security behavior</strong> and cannot be bypassed from a static page without a backend proxy.<br><br>
-      <strong style="color:var(--text)">Check manually (free):</strong><br>
-      &rarr; <a href="https://securityheaders.com/?q=https://www.kneuralabs.com&followRedirects=on" target="_blank">securityheaders.com/?q=kneuralabs.com</a><br>
-      &rarr; <a href="https://observatory.mozilla.org/analyze/www.kneuralabs.com" target="_blank">observatory.mozilla.org</a><br>
-      &rarr; <code style="color:var(--accent)">curl -I https://www.kneuralabs.com</code>
-    </div>
-  </div>
-</div>
-
-<div class="section-label" style="margin-top:4px">02 &middot; INTRANET &middot; <span id="intranet-domain-label">intranet.kneuralabs.com</span> <span class="sim-badge" id="intranet-section-badge">LIVE PROBE</span></div>
-<div class="main-grid">
-
-  <div class="panel" style="border-color:rgba(255,107,53,.25)">
-    <div class="panel-hdr">
-      <div class="panel-title"><span class="dot" style="background:var(--warn)"></span>Intranet Agent Status</div>
-      <span class="badge info" id="agent-badge">AWAITING SCAN</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2);border-radius:10px;margin-bottom:14px">
-      <div style="width:44px;height:44px;flex-shrink:0;border-radius:50%;border:2px dashed rgba(255,107,53,.4);display:flex;align-items:center;justify-content:center;font-size:1.3rem;animation:spin 6s linear infinite">&#x1F4E1;</div>
+  <header data-screen-label="header">
+    <div class="logo">
+      <div class="mark"><b></b><i></i></div>
       <div>
-        <div id="intranet-probe-title" style="font-size:.78rem;font-weight:700;color:var(--warn);margin-bottom:3px">Awaiting Probe</div>
-        <div id="intranet-probe-note" style="font-size:.65rem;color:var(--muted);line-height:1.5">Enter an Intranet URL above and press Scan. Your browser will test live reachability. A private host cannot be reached directly &mdash; connect the agent below to stream real status.</div>
+        <h1>Vigil<sup class="tm">&trade;</sup></h1>
+        <div class="tag">Continuous Surface Watch</div>
       </div>
     </div>
-    <div style="font-size:.62rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Live Reachability Probe</div>
-    <div class="alarm-list" id="intranet-probe"><div style="color:var(--muted);font-size:.68rem;padding:8px 10px">No probe run yet.</div></div>
+    <div class="hdr-right">
+      <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+      <div class="clock" id="clock">Loading…</div>
+      <button class="refresh-btn" id="refresh-btn" onclick="runAllChecks()"><span class="ico">&#x21BB;</span>Refresh</button>
+    </div>
+  </header>
+
+  <div class="command-bar">
+    <div class="cfg-field">
+      <label><span class="lk"></span>Public Surface</label>
+      <input id="public-url" type="text" placeholder="https://www.example.com" value="https://www.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
+    </div>
+    <div class="cfg-field">
+      <label><span class="lk warn"></span>Intranet Target</label>
+      <input id="intranet-url-input" type="text" placeholder="https://intranet.example.com" value="https://intranet.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
+    </div>
+    <button class="scan-btn" id="scan-btn" onclick="runAllChecks()"><span class="ico">&#x25B6;</span>Run Scan</button>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <div class="panel">
+  <div class="status-bar">
+    <div class="stat-card loading" id="card-ssl">
+      <div class="stat-label">Cert Days Left</div>
+      <div class="stat-val" id="val-ssl">…</div>
+      <div class="kpi-track"><i id="track-ssl"></i></div>
+      <div class="stat-sub" id="sub-ssl">Checking crt.sh</div>
+    </div>
+    <div class="stat-card loading" id="card-dns">
+      <div class="stat-label">DNS Status</div>
+      <div class="stat-val" id="val-dns">…</div>
+      <div class="kpi-track"><i id="track-dns"></i></div>
+      <div class="stat-sub" id="sub-dns">Google DoH</div>
+    </div>
+    <div class="stat-card loading" id="card-certs">
+      <div class="stat-label">CT Log Entries</div>
+      <div class="stat-val" id="val-certs">…</div>
+      <div class="kpi-track"><i id="track-certs"></i></div>
+      <div class="stat-sub" id="sub-certs">crt.sh database</div>
+    </div>
+    <div class="stat-card loading" id="card-issuer">
+      <div class="stat-label">Issuing CA</div>
+      <div class="stat-val" id="val-issuer" style="font-size:1.05rem">…</div>
+      <div class="kpi-track"><i id="track-issuer"></i></div>
+      <div class="stat-sub" id="sub-issuer">Certificate authority</div>
+    </div>
+    <div class="stat-card loading" id="card-mx">
+      <div class="stat-label">Mail (MX)</div>
+      <div class="stat-val" id="val-mx">…</div>
+      <div class="kpi-track"><i id="track-mx"></i></div>
+      <div class="stat-sub" id="sub-mx">DNS MX record</div>
+    </div>
+    <div class="stat-card warn" id="card-intranet">
+      <div class="stat-label">Intranet</div>
+      <div class="stat-val" id="val-intranet" style="font-size:1.15rem">&#x2014;</div>
+      <div class="kpi-track"><i id="track-intranet"></i></div>
+      <div class="stat-sub" id="sub-intranet">Awaiting probe</div>
+    </div>
+  </div>
+
+  <div class="section-label">
+    <span class="idx">01</span> Public Surface
+    <span class="dom" id="public-domain-label">kneuralabs.com</span>
+    <span class="real-badge">LIVE · FREE PUBLIC APIs</span>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel" data-screen-label="ssl-panel">
       <div class="panel-hdr">
-        <div class="panel-title"><span class="dot" style="background:var(--ok)"></span>Live Scan Event Log</div>
-        <span class="badge ok">REAL &middot; Public APIs</span>
+        <div class="panel-title"><span class="dot"></span>SSL / TLS Certificate <span class="src">crt.sh</span></div>
+        <span class="badge info" id="ssl-badge"><span class="spinner"></span>Loading</span>
       </div>
-      <div class="event-feed" id="event-feed"><div style="color:var(--muted);font-size:.7rem;padding:10px">Starting scan&hellip;</div></div>
+      <div id="ssl-details">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      </div>
     </div>
 
-    <div class="panel" style="border-color:rgba(0,229,255,.15)">
+    <div class="panel" data-screen-label="dns-panel">
       <div class="panel-hdr">
-        <div class="panel-title"><span class="dot" style="background:var(--accent)"></span>Connect Intranet Agent</div>
-        <span class="badge ok">1-CLICK</span>
+        <div class="panel-title"><span class="dot"></span>DNS Records <span class="src">Google DoH</span></div>
+        <span class="badge info" id="dns-badge"><span class="spinner"></span>Resolving</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="dns-list" id="dns-details">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel" data-screen-label="ct-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot info"></span>Certificate Transparency <span class="src">crt.sh log</span></div>
+        <span class="badge info" id="crt-badge"><span class="spinner"></span>Fetching</span>
+      </div>
+      <div id="crt-details">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      </div>
+    </div>
+
+    <div class="panel" data-screen-label="headers-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot warn"></span>Security Headers</div>
+        <span class="badge warn">CORS LIMITED</span>
+      </div>
+      <div class="cors-note">
+        Browsers block cross-origin response-header inspection (CORS policy). This is <strong style="color:var(--ok)">correct security behavior</strong> and cannot be bypassed from a static page without a backend proxy.<br><br>
+        <strong>Verify manually (free):</strong><br>
+        &rarr; <a id="sh-link1" href="https://securityheaders.com/?q=https://www.kneuralabs.com&followRedirects=on" target="_blank" rel="noopener">securityheaders.com</a><br>
+        &rarr; <a id="sh-link2" href="https://observatory.mozilla.org/analyze/www.kneuralabs.com" target="_blank" rel="noopener">observatory.mozilla.org</a><br>
+        &rarr; <code id="sh-curl">curl -I https://www.kneuralabs.com</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:6px">
+    <span class="idx">02</span> Intranet
+    <span class="dom" id="intranet-domain-label">intranet.kneuralabs.com</span>
+    <span class="sim-badge" id="intranet-section-badge">LIVE PROBE</span>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel" data-screen-label="intranet-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot warn"></span>Intranet Agent Status</div>
+        <span class="badge info" id="agent-badge">AWAITING SCAN</span>
+      </div>
+      <div class="probe-hero">
+        <div class="radar" id="probe-radar"><b></b></div>
+        <div>
+          <div class="probe-hero-title" id="intranet-probe-title" style="color:var(--warn)">Awaiting Probe</div>
+          <div class="probe-hero-note" id="intranet-probe-note">Enter an intranet URL above and press Run Scan. Your browser tests live reachability. A private host can't be reached directly — connect the agent below to stream real status.</div>
+        </div>
+      </div>
+      <div class="sub-head">Live Reachability Probe</div>
+      <div class="alarm-list" id="intranet-probe">
+        <div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No probe run yet.</div>
+      </div>
+    </div>
+
+    <div class="col-stack">
+      <div class="panel" data-screen-label="event-log">
+        <div class="panel-hdr">
+          <div class="panel-title"><span class="dot"></span>Live Scan Event Log</div>
+          <span class="badge ok">REAL · PUBLIC APIs</span>
+        </div>
+        <div class="event-feed" id="event-feed">
+          <div style="color:var(--muted);font-size:.7rem;padding:10px;font-family:var(--font-mono)">Starting scan…</div>
+        </div>
+      </div>
+
+      <div class="panel" data-screen-label="agent-connect">
+        <div class="panel-hdr">
+          <div class="panel-title"><span class="dot info"></span>Connect Intranet Agent</div>
+          <span class="badge ok">1-CLICK</span>
+        </div>
         <div class="oneclick">
-          <h4>&#x26A1; One-click setup &mdash; no configuration</h4>
+          <h4>&#x26A1; One-click setup — no configuration</h4>
           <p>On any machine inside your network, paste <strong>one</strong> command into a terminal. It installs the agent, opens a secure tunnel, and reopens this dashboard already connected.</p>
           <div class="cmd-row">
             <span class="os">Mac / Linux</span>
@@ -363,457 +188,48 @@ details.manual>div{margin-top:6px}
             <code class="step-cmd">irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex</code>
             <button class="copy-btn" onclick="copyText('irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex',this)">Copy</button>
           </div>
-          <p style="margin:6px 0 0">Want a permanent URL that survives restarts? Add <code style="font-size:.6rem">--permanent --hostname agent.yourdomain.com</code> (needs a Cloudflare account) — see <code style="font-size:.6rem">agent/README.md</code>.</p>
+          <p style="margin:7px 0 0">Want a permanent URL that survives restarts? Add <code>--permanent --hostname agent.yourdomain.com</code> — see <code>agent/README.md</code>.</p>
         </div>
         <details class="manual">
-        <summary>Prefer to set it up by hand? Manual 3 steps</summary>
-        <div class="agent-step">
-          <div class="agent-step-num">1</div>
-          <div style="flex:1;min-width:0">
-            <div class="agent-step-t">Run the agent on an intranet host</div>
-            <div class="agent-step-d">Copy the repo's <code>agent/</code> folder to any box that can reach your services. Zero dependencies &mdash; just Python 3:</div>
-            <code class="step-cmd">cp config.example.json config.json &amp;&amp; python3 vigil_agent.py --config config.json</code>
+          <summary>Prefer to set it up by hand? Manual 3 steps</summary>
+          <div>
+            <div class="agent-step">
+              <div class="agent-step-num">1</div>
+              <div>
+                <div class="agent-step-t">Run the agent on an intranet host</div>
+                <div class="agent-step-d">Copy the repo's <code>agent/</code> folder to any box that can reach your services. Zero dependencies — just Python 3:</div>
+                <code class="step-cmd">cp config.example.json config.json &amp;&amp; python3 vigil_agent.py --config config.json</code>
+              </div>
+            </div>
+            <div class="agent-step">
+              <div class="agent-step-num">2</div>
+              <div>
+                <div class="agent-step-t">Expose its <code>/events</code> endpoint</div>
+                <div class="agent-step-d">Easiest — a Cloudflare Tunnel (no inbound ports; gives a public HTTPS URL). The agent already sends CORS headers:</div>
+                <code class="step-cmd">cloudflared tunnel --url http://localhost:8787</code>
+                <div class="agent-step-d" style="margin-top:6px">Alternative: set <code>webhook_url</code> in the config to PUSH events to a relay you control, then use that relay's read URL.</div>
+              </div>
+            </div>
+            <div class="agent-step">
+              <div class="agent-step-num">3</div>
+              <div>
+                <div class="agent-step-t">Paste the URL below &amp; Connect</div>
+                <div class="agent-step-d">The dashboard polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed.</div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="agent-step">
-          <div class="agent-step-num">2</div>
-          <div style="flex:1;min-width:0">
-            <div class="agent-step-t">Expose its <code>/events</code> endpoint</div>
-            <div class="agent-step-d">Easiest &mdash; a Cloudflare Tunnel (no inbound ports; gives a public HTTPS URL). The agent already sends CORS headers:</div>
-            <code class="step-cmd">cloudflared tunnel --url http://localhost:8787</code>
-            <div class="agent-step-d" style="margin-top:5px">Alternative: set <code>webhook_url</code> in the config to PUSH events to a relay you control (Cloudflare Worker / Pipedream), then use that relay's read URL.</div>
-          </div>
-        </div>
-        <div class="agent-step">
-          <div class="agent-step-num">3</div>
-          <div style="flex:1;min-width:0">
-            <div class="agent-step-t">Paste the URL below &amp; Connect</div>
-            <div class="agent-step-d">The dashboard polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed above.</div>
-          </div>
-        </div>
         </details>
-        <div style="display:flex;gap:6px;margin-top:4px">
-          <input id="webhook-url" placeholder="https://&lt;your-tunnel&gt;.trycloudflare.com/events" style="flex:1;min-width:0;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:.68rem;font-family:var(--font);outline:none" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter')connectWebhook()">
+        <div class="agent-row">
+          <input id="webhook-url" placeholder="https://&lt;your-tunnel&gt;.trycloudflare.com/events" onkeydown="if(event.key==='Enter')connectWebhook()">
           <button id="agent-connect-btn" class="agent-btn go" onclick="connectWebhook()">Connect</button>
           <button id="agent-disconnect-btn" class="agent-btn stop" style="display:none" onclick="disconnectWebhook()">Stop</button>
         </div>
-        <div id="agent-conn-status" style="font-size:.6rem;color:var(--muted);min-height:.8rem;margin-top:2px"></div>
+        <div id="agent-conn-status"></div>
       </div>
     </div>
   </div>
-</div>
 
 </div>
-
-<script>
-function tick(){const d=new Date();document.getElementById('clock').textContent=d.toUTCString().replace('GMT','UTC')}
-setInterval(tick,1000);tick();
-
-function ts(){return new Date().toTimeString().slice(0,8)}
-
-// Domain currently being scanned (derived from the Public Website URL field).
-let PUBLIC_DOMAIN='kneuralabs.com';
-// Parse a host from a user-entered URL; strip a leading "www." for CT/DNS lookups.
-function hostFromUrl(raw){
-  let h=raw.trim();
-  try{h=new URL(h).host;}catch(_){h=h.replace(/^[a-z]+:\/\//i,'').split('/')[0];}
-  return h.replace(/^www\./i,'');
-}
-
-// HTML-escape untrusted strings (agent feed can be pointed at any URL).
-function esc(s){
-  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-  });
-}
-// Copy text to the clipboard and give brief button feedback.
-function copyText(text,btn){
-  const done=function(){if(btn){const o=btn.textContent;btn.textContent='Copied!';setTimeout(function(){btn.textContent=o;},1200);}};
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,done);}
-  else{const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(_){ }t.remove();done();}
-}
-
-// Intranet service endpoints swept by the live reachability report.
-const INTRANET_SERVICES=[
-  {name:'Intranet Root',     path:'',          icon:'&#x1F310;'},
-  {name:'SSO / Auth Portal', path:'/auth',     icon:'&#x1F465;'},
-  {name:'HR System',         path:'/hr',       icon:'&#x1F4C1;'},
-  {name:'Dev Tools',         path:'/dev',      icon:'&#x1F527;'},
-  {name:'File Storage',      path:'/files',    icon:'&#x1F4BE;'},
-  {name:'Analytics',         path:'/analytics',icon:'&#x1F4CA;'},
-  {name:'VPN Gateway',       path:'/vpn',      icon:'&#x1F511;'},
-  {name:'API Gateway',       path:'/api',      icon:'&#x26A1;'}
-];
-// True once the agent webhook is delivering events (keeps the badge honest).
-let agentConnected=false;
-
-// Single no-cors reachability probe with timeout. Returns {ok, ms, why}.
-async function probeOne(url,timeoutMs){
-  const start=performance.now();
-  const ctrl=new AbortController();
-  const t=setTimeout(()=>ctrl.abort(),timeoutMs||6000);
-  try{
-    await fetch(url,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
-    clearTimeout(t);
-    return {ok:true,ms:Math.round(performance.now()-start)};
-  }catch(e){
-    clearTimeout(t);
-    return {ok:false,ms:Math.round(performance.now()-start),why:e.name==='AbortError'?'timeout':'unreachable'};
-  }
-}
-
-function intranetRow(icon,name,sub,cls,label){
-  return '<div class="alarm"><span class="alarm-icon">'+icon+'</span>'+
-    '<div class="alarm-body"><strong>'+esc(name)+'</strong><p>'+sub+'</p></div>'+
-    '<span class="badge '+cls+'">'+label+'</span></div>';
-}
-
-function addEvent(type,title,msg){
-  const feed=document.getElementById('event-feed');
-  if(feed.querySelector('div[style]'))feed.innerHTML='';
-  const div=document.createElement('div');
-  div.className='event '+type;
-  div.innerHTML='<span class="event-time">'+ts()+'</span><div class="event-body"><strong>'+title+'</strong><p>'+msg+'</p></div>';
-  feed.insertBefore(div,feed.firstChild);
-  if(feed.children.length>25)feed.removeChild(feed.lastChild);
-}
-
-function setCard(id,cls,val,sub){
-  const c=document.getElementById('card-'+id);
-  c.className='stat-card '+cls;
-  const v=document.getElementById('val-'+id);
-  if(v)v.textContent=val;
-  const s=document.getElementById('sub-'+id);
-  if(s)s.textContent=sub;
-}
-
-async function checkSSLandCT(){
-  try{
-    addEvent('info','SSL &amp; CT Scan','Querying crt.sh for '+PUBLIC_DOMAIN+'...');
-    const r=await fetch('https://crt.sh/?q='+encodeURIComponent(PUBLIC_DOMAIN)+'&output=json');
-    if(!r.ok)throw new Error('crt.sh HTTP '+r.status);
-    const data=await r.json();
-    if(!data||!data.length){setCard('ssl','warn','None','No certs in CT log');return;}
-
-    const sorted=data.sort((a,b)=>new Date(b.not_after)-new Date(a.not_after));
-    const latest=sorted[0];
-    const expiry=new Date(latest.not_after);
-    const daysLeft=Math.floor((expiry-new Date())/(864e5));
-    const issuerMatch=(latest.issuer_name||'').match(/O=([^,]+)/);
-    const issuer=issuerMatch?issuerMatch[1].trim():(latest.issuer_name||'Unknown').slice(0,20);
-    const cls=daysLeft>60?'ok':daysLeft>20?'warn':'crit';
-
-    setCard('ssl',cls,daysLeft+'d','Cert expires '+expiry.toDateString().slice(4,15));
-    setCard('certs','ok',data.length,'Certs in CT log');
-    setCard('issuer','ok',issuer.split(' ')[0],issuer);
-
-    document.getElementById('ssl-badge').className='badge '+cls;
-    document.getElementById('ssl-badge').textContent=daysLeft>60?'VALID':daysLeft>20?'EXPIRING SOON':'CRITICAL';
-    document.getElementById('ssl-details').innerHTML=
-      '<div class="cert-info">'+
-      '<div class="cert-row"><span class="cert-key">Common Name</span><span class="cert-val ok">'+esc(latest.common_name||PUBLIC_DOMAIN)+'</span></div>'+
-      '<div class="cert-row"><span class="cert-key">Issuer</span><span class="cert-val">'+esc(issuer)+'</span></div>'+
-      '<div class="cert-row"><span class="cert-key">Valid From</span><span class="cert-val">'+new Date(latest.not_before).toDateString().slice(4)+'</span></div>'+
-      '<div class="cert-row"><span class="cert-key">Valid Until</span><span class="cert-val '+cls+'">'+expiry.toDateString().slice(4)+'</span></div>'+
-      '<div class="cert-row"><span class="cert-key">Days Remaining</span><span class="cert-val '+cls+'">'+daysLeft+' days</span></div>'+
-      '<div class="cert-row"><span class="cert-key">CT Entry ID</span><span class="cert-val" style="font-size:.6rem">'+esc(latest.id)+'</span></div>'+
-      '</div>';
-
-    // CT panel
-    const sans=[...new Set(sorted.slice(0,8).map(c=>c.common_name).filter(Boolean))];
-    document.getElementById('crt-badge').className='badge ok';
-    document.getElementById('crt-badge').textContent=data.length+' ENTRIES';
-    document.getElementById('crt-details').innerHTML=
-      '<div class="cert-info">'+
-      '<div class="cert-row"><span class="cert-key">Total CT Entries</span><span class="cert-val ok">'+data.length+'</span></div>'+
-      '<div class="cert-row"><span class="cert-key">Latest Issuance</span><span class="cert-val">'+new Date(latest.not_before).toDateString().slice(4)+'</span></div>'+
-      '<div style="margin:8px 0 5px;font-size:.62rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Domains Seen in CT Log</div>'+
-      sans.map(n=>'<div class="cert-row"><span class="cert-key">SAN</span><span class="cert-val" style="font-size:.62rem">'+esc(n)+'</span></div>').join('')+
-      '</div>';
-
-    addEvent('ok','SSL Cert Live','Expires in '+daysLeft+' days | Issuer: '+issuer+' | CT entries: '+data.length);
-  }catch(e){
-    setCard('ssl','crit','ERR','crt.sh: '+e.message.slice(0,30));
-    addEvent('crit','SSL Check Failed',e.message);
-    document.getElementById('ssl-details').innerHTML='<div class="cors-note">Error: '+e.message+'</div>';
-    document.getElementById('crt-details').innerHTML='<div class="cors-note">Could not reach crt.sh</div>';
-  }
-}
-
-async function checkDNS(){
-  const types=[{t:'A',code:1},{t:'AAAA',code:28},{t:'MX',code:15},{t:'NS',code:2},{t:'TXT',code:16},{t:'CAA',code:257}];
-  const rows=[];
-  let hasMX=false;
-  try{
-    addEvent('info','DNS Probe','Google DoH resolving '+PUBLIC_DOMAIN+' records...');
-    for(const {t,code} of types){
-      try{
-        const r=await fetch('https://dns.google/resolve?name='+encodeURIComponent(PUBLIC_DOMAIN)+'&type='+code);
-        const d=await r.json();
-        if(d.Answer){
-          d.Answer.forEach(a=>{rows.push({type:t,val:a.data});});
-          if(t==='MX'){hasMX=true;setCard('mx','ok','MX','Mail configured');}
-        }
-      }catch(_){}
-    }
-    if(!hasMX)setCard('mx','warn','None','No MX record');
-
-    if(rows.length){
-      setCard('dns','ok','OK',''+rows.length+' records');
-      document.getElementById('dns-badge').className='badge ok';
-      document.getElementById('dns-badge').textContent='RESOLVED';
-      document.getElementById('dns-details').innerHTML=
-        rows.slice(0,12).map(r=>'<div class="dns-row"><span class="dns-type">'+r.type+'</span><span class="dns-val">'+esc(r.val)+'</span></div>').join('');
-      addEvent('ok','DNS Resolved',rows.length+' records fetched via Google DoH');
-    } else {
-      setCard('dns','warn','?','No records returned');
-      addEvent('warn','DNS Empty',PUBLIC_DOMAIN+' returned no DNS records');
-    }
-  }catch(e){
-    setCard('dns','crit','ERR','DoH failed');
-    addEvent('crit','DNS Failed',e.message);
-  }
-}
-
-// Live reachability probe of the entered Intranet URL. Uses a no-cors fetch:
-// an opaque response means the host responded; a network error / timeout means
-// it is not reachable from the browser (expected for a private network).
-// When the agent is connected its /status feed (real HTTP codes) owns the rows,
-// so the opaque browser sweep would only downgrade the data — skip it.
-async function checkIntranet(){
-  if(agentConnected){
-    addEvent('info','Intranet','Agent connected — service rows reflect live HTTP status from the agent /status feed.');
-    return;
-  }
-  const probe=document.getElementById('intranet-probe');
-  const raw=document.getElementById('intranet-url-input').value.trim();
-  const titleEl=document.getElementById('intranet-probe-title');
-  const noteEl=document.getElementById('intranet-probe-note');
-  const badge=document.getElementById('agent-badge');
-  if(!raw){
-    probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px">No Intranet URL entered.</div>';
-    setCard('intranet','warn','&#x1F512;','No URL');
-    if(!agentConnected){badge.className='badge warn';badge.textContent='NO URL';}
-    return;
-  }
-  const host=hostFromUrl(raw);
-  document.getElementById('intranet-domain-label').textContent=host;
-  let base;
-  try{base=new URL(raw).origin;}
-  catch(_){try{base=new URL('https://'+raw).origin;}catch(__){base='https://'+host;}}
-
-  // Probing state.
-  titleEl.textContent='Probing '+INTRANET_SERVICES.length+' services…';titleEl.style.color='var(--accent)';
-  noteEl.innerHTML='Running live reachability probes against <strong>'+host+'</strong> endpoints from your browser…';
-  probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px"><span class="spinner"></span>Sweeping '+INTRANET_SERVICES.length+' endpoints…</div>';
-  if(!agentConnected){badge.className='badge info';badge.textContent='SCANNING…';}
-  addEvent('info','Intranet Sweep','Probing '+INTRANET_SERVICES.length+' '+host+' endpoints from your browser…');
-
-  // Probe every endpoint in parallel.
-  const results=await Promise.all(INTRANET_SERVICES.map(async svc=>{
-    const url=base+svc.path;
-    const r=await probeOne(url,6000);
-    return Object.assign({url:url},svc,r);
-  }));
-
-  let up=0;
-  const rows=results.map(r=>{
-    const path=r.url.replace(/^https?:\/\//i,'');
-    if(r.ok){
-      up++;
-      const slow=r.ms>1500;
-      return intranetRow(r.icon,r.name,path+' &middot; '+r.ms+' ms',slow?'warn':'ok',slow?'SLOW':'REACHABLE');
-    }
-    return intranetRow(r.icon,r.name,path+' &middot; '+(r.why==='timeout'?'timed out (6s)':'no response')+' &middot; '+r.ms+' ms','crit',r.why==='timeout'?'TIMEOUT':'DOWN');
-  }).join('');
-  probe.innerHTML=rows;
-
-  const total=results.length;
-  const cls=up===total?'ok':(up===0?'crit':'warn');
-  titleEl.textContent=up+' / '+total+' endpoints reachable';
-  titleEl.style.color='var(--'+cls+')';
-  noteEl.innerHTML='Live browser probe of <strong>'+host+'</strong>. “Reachable” means the endpoint answered (HTTP status &amp; body are opaque cross-origin). For status codes, latency per route and logs, connect the agent below.';
-  setCard('intranet',cls,up+'/'+total,up+' reachable');
-
-  // Keep the panel header badge consistent with the report (unless the agent feed owns it).
-  if(!agentConnected){
-    badge.className='badge '+cls;
-    badge.textContent='LIVE PROBE · '+up+'/'+total+' UP';
-  }
-  addEvent(cls,'Intranet Sweep Done',up+' of '+total+' '+host+' endpoints reachable');
-}
-
-async function runAllChecks(){
-  const btn=document.getElementById('refresh-btn');
-  const scanBtn=document.getElementById('scan-btn');
-  const pub=document.getElementById('public-url').value.trim();
-  if(!pub){alert('Please enter a Public Website URL');return;}
-  PUBLIC_DOMAIN=hostFromUrl(pub);
-  document.getElementById('public-domain-label').textContent=PUBLIC_DOMAIN;
-
-  btn.disabled=true;btn.textContent='Scanning...';
-  if(scanBtn){scanBtn.disabled=true;scanBtn.textContent='Scanning...';}
-
-  ['ssl','dns','certs','issuer','mx'].forEach(id=>setCard(id,'loading','...','Checking...'));
-  setCard('intranet','loading','...','Probing...');
-  document.getElementById('event-feed').innerHTML='';
-  addEvent('info','Scan Started','Live checks on '+PUBLIC_DOMAIN+' via crt.sh + Google DoH (100% free, no API key)');
-
-  await Promise.all([checkSSLandCT(), checkDNS(), checkIntranet()]);
-
-  addEvent('ok','Scan Complete','Public APIs + intranet probe done. Connect the agent for live internal events.');
-  btn.disabled=false;btn.textContent='&#x21BB; Refresh All';
-  if(scanBtn){scanBtn.disabled=false;scanBtn.innerHTML='&#x25B6; Scan';}
-}
-
-
-let webhookInterval = null;
-let seenEventKeys = new Set();
-
-function iconForService(name){
-  const m=INTRANET_SERVICES.find(s=>s.name===name);
-  return m?m.icon:'&#x1F310;';
-}
-
-// Render the intranet service rows from the agent's /status snapshot, showing
-// the real HTTP status code per service and flagging any anomaly/breach.
-function renderAgentStatus(s){
-  if(!s||!Array.isArray(s.services))return false;
-  const probe=document.getElementById('intranet-probe');
-  const titleEl=document.getElementById('intranet-probe-title');
-  const noteEl=document.getElementById('intranet-probe-note');
-  let healthy=0;const total=s.services.length;
-  const ok=['ok','info','warn','crit'];
-  const rows=s.services.map(svc=>{
-    const cat=ok.indexOf(svc.category)>=0?svc.category:'info';
-    if(cat==='ok')healthy++;
-    const flags=Array.isArray(svc.flags)?svc.flags:[];
-    let sub=esc(String(svc.url||svc.name||'').replace(/^https?:\/\//i,''));
-    if(svc.latency_ms!=null)sub+=' &middot; '+(parseInt(svc.latency_ms,10)||0)+' ms';
-    if(flags.length)sub+=' &middot; <span style="color:var(--crit)">'+flags.map(esc).join('; ')+'</span>';
-    let label=esc(svc.code?(''+svc.code):'DOWN');
-    let cls=cat;
-    if(flags.length){label='&#x1F6A8; '+label;cls='crit';}
-    return intranetRow(iconForService(svc.name),svc.name,sub,cls,label);
-  }).join('');
-  probe.innerHTML=rows;
-  const alerts=Array.isArray(s.alerts)?s.alerts:[];
-  const cls=alerts.length?'crit':(healthy===total?'ok':'warn');
-  titleEl.textContent='Agent live · '+healthy+'/'+total+' healthy'+(alerts.length?' · '+alerts.length+' alert(s)':'');
-  titleEl.style.color='var(--'+cls+')';
-  if(alerts.length){
-    noteEl.innerHTML='<strong style="color:var(--crit)">&#x1F6A8; '+alerts.length+' active flag(s):</strong> '+
-      alerts.map(esc).join(' &middot; ');
-  }else{
-    noteEl.innerHTML='Live HTTP status codes &amp; latency from the connected agent. No anomalies flagged.';
-  }
-  setCard('intranet',cls,healthy+'/'+total,alerts.length?alerts.length+' alert(s)':healthy+' healthy');
-  return true;
-}
-
-function setConnStatus(msg,color){
-  const el=document.getElementById('agent-conn-status');
-  if(el){el.innerHTML=msg;el.style.color=color||'var(--muted)';}
-}
-function setAgentBadge(cls,text){
-  const b=document.getElementById('agent-badge');
-  b.className='badge '+cls;b.textContent=text;
-}
-
-function disconnectWebhook(){
-  if(webhookInterval){clearInterval(webhookInterval);webhookInterval=null;}
-  agentConnected=false;
-  document.getElementById('agent-connect-btn').style.display='';
-  document.getElementById('agent-disconnect-btn').style.display='none';
-  setAgentBadge('warn','AGENT DISCONNECTED');
-  setConnStatus('Stopped polling. The live browser probe above is still active.','var(--warn)');
-  addEvent('info','Agent Disconnected','Stopped polling the agent endpoint.');
-}
-
-function connectWebhook(){
-  const url=document.getElementById('webhook-url').value.trim();
-  if(!url){setConnStatus('Enter the agent <code>/events</code> URL first.','var(--warn)');return;}
-  if(!/^https?:\/\//i.test(url)){setConnStatus('URL must start with http:// or https://','var(--warn)');return;}
-  document.getElementById('agent-connect-btn').style.display='none';
-  document.getElementById('agent-disconnect-btn').style.display='';
-  setAgentBadge('info','CONNECTING…');
-  setConnStatus('Connecting to '+url+' …');
-  addEvent('info','Agent Connecting','Polling '+url+' every 10s for intranet events…');
-  if(webhookInterval)clearInterval(webhookInterval);
-  seenEventKeys=new Set();
-  // Derive the /status endpoint (real per-service HTTP codes) from the /events URL.
-  const statusUrl=/\/events(\?|$)/.test(url)?url.replace(/\/events(\?|$)/,'/status$1'):null;
-
-  async function poll(){
-    let r;
-    try{
-      r=await fetch(url,{cache:'no-store'});
-    }catch(err){
-      agentConnected=false;
-      setAgentBadge('crit','UNREACHABLE');
-      setConnStatus('Cannot reach endpoint (network or CORS). Check the agent is running and the URL is publicly reachable.','var(--crit)');
-      addEvent('crit','Agent Unreachable','Could not reach '+url+' — verify the tunnel/agent and that CORS is allowed.');
-      return;
-    }
-    if(!r.ok){
-      agentConnected=false;
-      setAgentBadge('crit','HTTP '+r.status);
-      setConnStatus('Endpoint returned HTTP '+r.status+'.','var(--crit)');
-      addEvent('crit','Agent HTTP Error',url+' returned HTTP '+r.status);
-      return;
-    }
-    let data;
-    try{data=await r.json();}
-    catch(_){
-      agentConnected=false;
-      setAgentBadge('crit','BAD JSON');
-      setConnStatus('Response was not valid JSON. Expected an array of {type,title,message}.','var(--crit)');
-      addEvent('crit','Agent Bad Response',url+' did not return JSON.');
-      return;
-    }
-    const events=Array.isArray(data)?data:[data];
-    let added=0;
-    events.forEach(e=>{
-      if(!e||typeof e!=='object')return;
-      const key=(e.ts||'')+'|'+(e.time||'')+'|'+(e.title||'')+'|'+(e.message||'');
-      if(seenEventKeys.has(key))return;
-      seenEventKeys.add(key);
-      const ty=['ok','info','warn','crit'].indexOf(e.type)>=0?e.type:'info';
-      addEvent(ty,esc(e.title||'Intranet Event'),esc(e.message||JSON.stringify(e)));
-      added++;
-    });
-    agentConnected=true;
-    setAgentBadge('ok','AGENT CONNECTED');
-    setConnStatus('Connected · '+events.length+' in buffer · '+added+' new · last poll '+new Date().toLocaleTimeString(),'var(--ok)');
-
-    // Pull the live per-service snapshot so each row shows its real HTTP code + flags.
-    if(statusUrl){
-      try{
-        const sr=await fetch(statusUrl,{cache:'no-store'});
-        if(sr.ok){renderAgentStatus(await sr.json());}
-      }catch(_){/* status endpoint optional (e.g. relay-only PUSH setups) */}
-    }
-  }
-  poll();
-  webhookInterval=setInterval(poll,10000);
-}
-
-window.addEventListener('load',()=>{
-  setTimeout(runAllChecks,500);
-  // One-click flow: run-agent.sh opens https://vigil.kneuralabs.com/?agent=<tunnel>/events
-  // and we auto-fill + connect so the user never has to copy/paste anything.
-  let agent=new URLSearchParams(location.search).get('agent');
-  if(!agent){const m=location.hash.match(/agent=([^&]+)/);if(m)agent=m[1];}
-  if(agent){
-    try{agent=decodeURIComponent(agent);}catch(_){}
-    if(/^https?:\/\//i.test(agent)){
-      const box=document.getElementById('webhook-url');
-      if(box)box.value=agent;
-      setConnStatus('Auto-connecting to agent from link…');
-      setTimeout(connectWebhook,900);
-    }
-  }
-});
-</script>
+<script src="app.js"></script>
 </body>
 </html>
