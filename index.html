@@ -1,282 +1,235 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Vigil — Certificate Transparency & SSL/TLS Monitoring</title>
-<meta name="description" content="Vigil watches Certificate Transparency logs in real time and alerts you the instant a certificate is issued for a domain you own — catching misissuance, shadow IT, and phishing prep before it bites." />
-<link rel="icon" href="/favicon.ico" sizes="any" />
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1c1a17">
+<meta name="description" content="Vigil — real-time SSL/TLS, DNS, certificate-transparency and intranet monitoring using free public APIs.">
+<title>Vigil™ — Sentinel</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<!-- Nav -->
-<header class="nav">
-<div class="nav-inner">
-<a class="brand" href="#">
-<span class="brand-mark">▲</span>
-<span class="brand-name">Vigil</span>
-</a>
-<nav class="nav-links">
-<a href="#features">Features</a>
-<a href="#how">How it works</a>
-<a href="#feed">Live feed</a>
-<a href="#pricing">Pricing</a>
-</nav>
-<div class="nav-cta">
-<a href="#" class="btn btn-ghost btn-sm">Sign in</a>
-<a href="#" class="btn btn-green btn-sm">Start monitoring</a>
-</div>
-</div>
-</header>
+<div class="wrap">
 
-<!-- Hero -->
-<section class="hero">
-<div class="hero-inner">
-<div class="hero-copy">
-<div class="eyebrow">
-<span class="dot dot-green"></span>
-Certificate Transparency monitoring
-</div>
-<h1 class="hero-title">Know the moment a certificate is issued for your domain.</h1>
-<p class="hero-sub">Vigil watches Certificate Transparency logs in real time and alerts you the instant a cert is issued for a domain you own — catching misissuance, shadow IT, and phishing prep before it bites.</p>
-<div class="hero-actions">
-<a href="#" class="btn btn-green">Start monitoring</a>
-<a href="#feed" class="btn btn-ghost">View live demo</a>
-</div>
-<div class="hero-trust">
-<span>No agent to install</span>
-<span class="sep">·</span>
-<span>Alerts in &lt;60s</span>
-<span class="sep">·</span>
-<span>Free for 1 domain</span>
-</div>
-</div>
-<!-- Hero terminal: live CT feed -->
-<div class="hero-term">
-<div class="term-head">
-<span class="term-dot red"></span>
-<span class="term-dot amber"></span>
-<span class="term-dot green"></span>
-<span class="term-title">ct-stream — vigil</span>
-</div>
-<div class="term-body" id="heroFeed">
-<div class="term-line"><span class="ts">12:04:02</span> <span class="ok">●</span> <span class="dom">api.acme.io</span> <span class="ca">Let's Encrypt</span></div>
-<div class="term-line"><span class="ts">12:04:05</span> <span class="ok">●</span> <span class="dom">cdn.acme.io</span> <span class="ca">Let's Encrypt</span></div>
-<div class="term-line"><span class="ts">12:04:09</span> <span class="warn">●</span> <span class="dom">vpn-acme.com</span> <span class="ca">ZeroSSL</span> <span class="flag">⚠ unrecognized</span></div>
-<div class="term-line"><span class="ts">12:04:13</span> <span class="ok">●</span> <span class="dom">mail.acme.io</span> <span class="ca">DigiCert</span></div>
-</div>
-</div>
-</div>
-</section>
+  <header data-screen-label="header">
+    <div class="logo">
+      <div class="mark"><b></b><i></i></div>
+      <div>
+        <h1>Vigil<sup class="tm">&trade;</sup></h1>
+        <div class="tag">Continuous Surface Watch</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+      <div class="clock" id="clock">Loading…</div>
+      <button class="refresh-btn" id="refresh-btn" onclick="runAllChecks()"><span class="ico">&#x21BB;</span>Refresh</button>
+    </div>
+  </header>
 
-<!-- Trust stats -->
-<section class="stats">
-<div class="stats-inner">
-<div class="stat">
-<div class="stat-num mono">6.2B</div>
-<div class="stat-label">certs indexed</div>
-</div>
-<div class="stat">
-<div class="stat-num mono">2,400+</div>
-<div class="stat-label">CT logs monitored</div>
-</div>
-<div class="stat">
-<div class="stat-num mono">&lt;60s</div>
-<div class="stat-label">median alert latency</div>
-</div>
-<div class="stat">
-<div class="stat-num mono">99.98%</div>
-<div class="stat-label">uptime</div>
-</div>
-</div>
-</section>
+  <div class="command-bar">
+    <div class="cfg-field">
+      <label><span class="lk"></span>Public Surface</label>
+      <input id="public-url" type="text" placeholder="https://www.example.com" value="https://www.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
+    </div>
+    <div class="cfg-field">
+      <label><span class="lk warn"></span>Intranet Target</label>
+      <input id="intranet-url-input" type="text" placeholder="https://intranet.example.com" value="https://intranet.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
+    </div>
+    <button class="scan-btn" id="scan-btn" onclick="runAllChecks()"><span class="ico">&#x25B6;</span>Run Scan</button>
+  </div>
 
-<!-- Features -->
-<section class="section" id="features">
-<div class="section-head">
-<h2 class="section-title">Everything you need to watch your certificate surface</h2>
-<p class="section-sub">From issuance to expiry, Vigil keeps an eye on every certificate touching your domains.</p>
-</div>
-<div class="features">
-<div class="feature-card">
-<div class="feature-icon">◎</div>
-<h3>CT Log Monitoring</h3>
-<p>We tail every public Certificate Transparency log and match new entries against your domains in real time.</p>
-</div>
-<div class="feature-card">
-<div class="feature-icon">⏱</div>
-<h3>SSL/TLS Expiry</h3>
-<p>Track expiry across every cert you own. Get warned days before anything lapses — never get caught by an outage again.</p>
-</div>
-<div class="feature-card">
-<div class="feature-icon">⚠</div>
-<h3>Misconfiguration Detection</h3>
-<p>Weak ciphers, missing chains, expired intermediates, SHA-1 leftovers. We flag the problems scanners miss.</p>
-</div>
-<div class="feature-card">
-<div class="feature-icon">⚡</div>
-<h3>Instant Alerts</h3>
-<p>Slack, PagerDuty, webhook, email. Route by severity. Get the alert before the attacker gets the cert.</p>
-</div>
-</div>
-</section>
+  <div class="status-bar">
+    <div class="stat-card loading" id="card-ssl">
+      <div class="stat-label">Cert Days Left</div>
+      <div class="stat-val" id="val-ssl">…</div>
+      <div class="kpi-track"><i id="track-ssl"></i></div>
+      <div class="stat-sub" id="sub-ssl">Checking crt.sh</div>
+    </div>
+    <div class="stat-card loading" id="card-dns">
+      <div class="stat-label">DNS Status</div>
+      <div class="stat-val" id="val-dns">…</div>
+      <div class="kpi-track"><i id="track-dns"></i></div>
+      <div class="stat-sub" id="sub-dns">Google DoH</div>
+    </div>
+    <div class="stat-card loading" id="card-certs">
+      <div class="stat-label">CT Log Entries</div>
+      <div class="stat-val" id="val-certs">…</div>
+      <div class="kpi-track"><i id="track-certs"></i></div>
+      <div class="stat-sub" id="sub-certs">crt.sh database</div>
+    </div>
+    <div class="stat-card loading" id="card-issuer">
+      <div class="stat-label">Issuing CA</div>
+      <div class="stat-val" id="val-issuer" style="font-size:1.05rem">…</div>
+      <div class="kpi-track"><i id="track-issuer"></i></div>
+      <div class="stat-sub" id="sub-issuer">Certificate authority</div>
+    </div>
+    <div class="stat-card loading" id="card-mx">
+      <div class="stat-label">Mail (MX)</div>
+      <div class="stat-val" id="val-mx">…</div>
+      <div class="kpi-track"><i id="track-mx"></i></div>
+      <div class="stat-sub" id="sub-mx">DNS MX record</div>
+    </div>
+    <div class="stat-card warn" id="card-intranet">
+      <div class="stat-label">Intranet</div>
+      <div class="stat-val" id="val-intranet" style="font-size:1.15rem">&#x2014;</div>
+      <div class="kpi-track"><i id="track-intranet"></i></div>
+      <div class="stat-sub" id="sub-intranet">Awaiting probe</div>
+    </div>
+  </div>
 
-<!-- How it works -->
-<section class="section section-alt" id="how">
-<div class="section-head">
-<h2 class="section-title">Live in five minutes</h2>
-<p class="section-sub">No agent. No DNS changes. Just add your domains and we start watching.</p>
-</div>
-<div class="steps">
-<div class="step">
-<div class="step-num mono">01</div>
-<h3>Add your domains</h3>
-<p>Drop in your apex domains and wildcards. Vigil expands them and starts watching every CT log immediately.</p>
-</div>
-<div class="step">
-<div class="step-num mono">02</div>
-<h3>We watch the logs</h3>
-<p>Every new certificate matching your domains is captured, parsed, and checked against your policy within seconds.</p>
-</div>
-<div class="step">
-<div class="step-num mono">03</div>
-<h3>You get alerted</h3>
-<p>Anything suspicious — unknown CA, unexpected SAN, misconfig — pings your team instantly through your channels.</p>
-</div>
-</div>
-</section>
+  <div class="section-label">
+    <span class="idx">01</span> Public Surface
+    <span class="dom" id="public-domain-label">kneuralabs.com</span>
+    <span class="real-badge">LIVE · FREE PUBLIC APIs</span>
+  </div>
 
-<!-- Live feed demo -->
-<section class="section" id="feed">
-<div class="section-head">
-<h2 class="section-title">Watch it happen in real time</h2>
-<p class="section-sub">This is a live sample of Certificate Transparency entries streaming through Vigil right now.</p>
-</div>
-<div class="feed-demo">
-<div class="term term-lg">
-<div class="term-head">
-<span class="term-dot red"></span>
-<span class="term-dot amber"></span>
-<span class="term-dot green"></span>
-<span class="term-title">ct-stream --all --watch</span>
-<span class="term-status"><span class="dot dot-green"></span> live</span>
-</div>
-<div class="term-body term-body-lg" id="demoFeed">
-<!-- JS fills this -->
-</div>
-</div>
-<div class="feed-side">
-<div class="feed-stat">
-<div class="feed-stat-label">Entries this session</div>
-<div class="feed-stat-num mono" id="entryCount">0</div>
-</div>
-<div class="feed-legend">
-<div class="legend-item"><span class="ok">●</span> Match — known domain</div>
-<div class="legend-item"><span class="warn">●</span> Warning — unrecognized CA</div>
-<div class="legend-item"><span class="crit">●</span> Critical — policy violation</div>
-</div>
-<a href="#" class="btn btn-green btn-block">Start monitoring your domains</a>
-</div>
-</div>
-</section>
+  <div class="main-grid">
+    <div class="panel" data-screen-label="ssl-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot"></span>SSL / TLS Certificate <span class="src">crt.sh</span></div>
+        <span class="badge info" id="ssl-badge"><span class="spinner"></span>Loading</span>
+      </div>
+      <div id="ssl-details">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      </div>
+    </div>
 
-<!-- Pricing -->
-<section class="section section-alt" id="pricing">
-<div class="section-head">
-<h2 class="section-title">Pricing that scales with your surface</h2>
-<p class="section-sub">Start free. Upgrade when you outgrow it.</p>
-</div>
-<div class="pricing">
-<div class="price-card">
-<div class="price-name">Solo</div>
-<div class="price-amount"><span class="price-cur">$</span>0<span class="price-per">/mo</span></div>
-<div class="price-desc">For a single domain and one engineer.</div>
-<ul class="price-feats">
-<li>1 domain</li>
-<li>CT log monitoring</li>
-<li>Email alerts</li>
-<li>7-day history</li>
-</ul>
-<a href="#" class="btn btn-ghost btn-block">Start free</a>
-</div>
-<div class="price-card price-card-feat">
-<div class="price-badge">Most popular</div>
-<div class="price-name">Team</div>
-<div class="price-amount"><span class="price-cur">$</span>49<span class="price-per">/mo</span></div>
-<div class="price-desc">For teams protecting a real surface.</div>
-<ul class="price-feats">
-<li>Up to 25 domains</li>
-<li>CT + SSL/TLS + misconfig</li>
-<li>Slack, PagerDuty, webhook</li>
-<li>90-day history</li>
-<li>Policy engine</li>
-</ul>
-<a href="#" class="btn btn-green btn-block">Start monitoring</a>
-</div>
-<div class="price-card">
-<div class="price-name">Enterprise</div>
-<div class="price-amount">Custom</div>
-<div class="price-desc">For large surfaces and compliance needs.</div>
-<ul class="price-feats">
-<li>Unlimited domains</li>
-<li>SSO / SAML</li>
-<li>Audit logs & SLA</li>
-<li>Dedicated support</li>
-<li>On-prem option</li>
-</ul>
-<a href="#" class="btn btn-ghost btn-block">Contact sales</a>
-</div>
-</div>
-</section>
+    <div class="panel" data-screen-label="dns-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot"></span>DNS Records <span class="src">Google DoH</span></div>
+        <span class="badge info" id="dns-badge"><span class="spinner"></span>Resolving</span>
+      </div>
+      <div class="dns-list" id="dns-details">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      </div>
+    </div>
+  </div>
 
-<!-- Footer CTA -->
-<section class="cta">
-<div class="cta-inner">
-<h2 class="cta-title">Your certificates are public. Your blind spots shouldn't be.</h2>
-<p class="cta-sub">Vigil watches Certificate Transparency logs so you find out about every cert before an attacker does.</p>
-<a href="#" class="btn btn-green btn-lg">Start monitoring free</a>
-</div>
-</section>
+  <div class="main-grid">
+    <div class="panel" data-screen-label="ct-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot info"></span>Certificate Transparency <span class="src">crt.sh log</span></div>
+        <span class="badge info" id="crt-badge"><span class="spinner"></span>Fetching</span>
+      </div>
+      <div id="crt-details">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      </div>
+    </div>
 
-<!-- Footer -->
-<footer class="footer">
-<div class="footer-inner">
-<div class="footer-brand">
-<span class="brand-mark">▲</span>
-<span class="brand-name">Vigil</span>
-</div>
-<div class="footer-cols">
-<div class="footer-col">
-<div class="footer-col-title">Product</div>
-<a href="#features">Features</a>
-<a href="#pricing">Pricing</a>
-<a href="#feed">Live feed</a>
-</div>
-<div class="footer-col">
-<div class="footer-col-title">Company</div>
-<a href="#">About</a>
-<a href="#">Blog</a>
-<a href="#">Security</a>
-</div>
-<div class="footer-col">
-<div class="footer-col-title">Legal</div>
-<a href="#">Privacy</a>
-<a href="#">Terms</a>
-<a href="#">DPA</a>
-</div>
-</div>
-</div>
-<div class="footer-bottom">
-<span class="mono">© 2025 Vigil Security, Inc.</span>
-<span class="footer-built">Built for people who read CT logs for fun.</span>
-</div>
-</footer>
+    <div class="panel" data-screen-label="headers-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot warn"></span>Security Headers</div>
+        <span class="badge warn">CORS LIMITED</span>
+      </div>
+      <div class="cors-note">
+        Browsers block cross-origin response-header inspection (CORS policy). This is <strong style="color:var(--ok)">correct security behavior</strong> and cannot be bypassed from a static page without a backend proxy.<br><br>
+        <strong>Verify manually (free):</strong><br>
+        &rarr; <a id="sh-link1" href="https://securityheaders.com/?q=https://www.kneuralabs.com&followRedirects=on" target="_blank" rel="noopener">securityheaders.com</a><br>
+        &rarr; <a id="sh-link2" href="https://observatory.mozilla.org/analyze/www.kneuralabs.com" target="_blank" rel="noopener">observatory.mozilla.org</a><br>
+        &rarr; <code id="sh-curl">curl -I https://www.kneuralabs.com</code>
+      </div>
+    </div>
+  </div>
 
+  <div class="section-label" style="margin-top:6px">
+    <span class="idx">02</span> Intranet
+    <span class="dom" id="intranet-domain-label">intranet.kneuralabs.com</span>
+    <span class="sim-badge" id="intranet-section-badge">LIVE PROBE</span>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel" data-screen-label="intranet-panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot warn"></span>Intranet Agent Status</div>
+        <span class="badge info" id="agent-badge">AWAITING SCAN</span>
+      </div>
+      <div class="probe-hero">
+        <div class="radar" id="probe-radar"><b></b></div>
+        <div>
+          <div class="probe-hero-title" id="intranet-probe-title" style="color:var(--warn)">Awaiting Probe</div>
+          <div class="probe-hero-note" id="intranet-probe-note">Enter an intranet URL above and press Run Scan. Your browser tests live reachability. A private host can't be reached directly — connect the agent below to stream real status.</div>
+        </div>
+      </div>
+      <div class="sub-head">Live Reachability Probe</div>
+      <div class="alarm-list" id="intranet-probe">
+        <div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No probe run yet.</div>
+      </div>
+    </div>
+
+    <div class="col-stack">
+      <div class="panel" data-screen-label="event-log">
+        <div class="panel-hdr">
+          <div class="panel-title"><span class="dot"></span>Live Scan Event Log</div>
+          <span class="badge ok">REAL · PUBLIC APIs</span>
+        </div>
+        <div class="event-feed" id="event-feed">
+          <div style="color:var(--muted);font-size:.7rem;padding:10px;font-family:var(--font-mono)">Starting scan…</div>
+        </div>
+      </div>
+
+      <div class="panel" data-screen-label="agent-connect">
+        <div class="panel-hdr">
+          <div class="panel-title"><span class="dot info"></span>Connect Intranet Agent</div>
+          <span class="badge ok">1-CLICK</span>
+        </div>
+        <div class="oneclick">
+          <h4>&#x26A1; One-click setup — no configuration</h4>
+          <p>On any machine inside your network, paste <strong>one</strong> command into a terminal. It installs the agent, opens a secure tunnel, and reopens this dashboard already connected.</p>
+          <div class="cmd-row">
+            <span class="os">Mac / Linux</span>
+            <code class="step-cmd">curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash</code>
+            <button class="copy-btn" onclick="copyText('curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash',this)">Copy</button>
+          </div>
+          <div class="cmd-row">
+            <span class="os">Windows</span>
+            <code class="step-cmd">irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex</code>
+            <button class="copy-btn" onclick="copyText('irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex',this)">Copy</button>
+          </div>
+          <p style="margin:7px 0 0">Want a permanent URL that survives restarts? Add <code>--permanent --hostname agent.yourdomain.com</code> — see <code>agent/README.md</code>.</p>
+        </div>
+        <details class="manual">
+          <summary>Prefer to set it up by hand? Manual 3 steps</summary>
+          <div>
+            <div class="agent-step">
+              <div class="agent-step-num">1</div>
+              <div>
+                <div class="agent-step-t">Run the agent on an intranet host</div>
+                <div class="agent-step-d">Copy the repo's <code>agent/</code> folder to any box that can reach your services. Zero dependencies — just Python 3:</div>
+                <code class="step-cmd">cp config.example.json config.json &amp;&amp; python3 vigil_agent.py --config config.json</code>
+              </div>
+            </div>
+            <div class="agent-step">
+              <div class="agent-step-num">2</div>
+              <div>
+                <div class="agent-step-t">Expose its <code>/events</code> endpoint</div>
+                <div class="agent-step-d">Easiest — a Cloudflare Tunnel (no inbound ports; gives a public HTTPS URL). The agent already sends CORS headers:</div>
+                <code class="step-cmd">cloudflared tunnel --url http://localhost:8787</code>
+                <div class="agent-step-d" style="margin-top:6px">Alternative: set <code>webhook_url</code> in the config to PUSH events to a relay you control, then use that relay's read URL.</div>
+              </div>
+            </div>
+            <div class="agent-step">
+              <div class="agent-step-num">3</div>
+              <div>
+                <div class="agent-step-t">Paste the URL below &amp; Connect</div>
+                <div class="agent-step-d">The dashboard polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed.</div>
+              </div>
+            </div>
+          </div>
+        </details>
+        <div class="agent-row">
+          <input id="webhook-url" placeholder="https://&lt;your-tunnel&gt;.trycloudflare.com/events" onkeydown="if(event.key==='Enter')connectWebhook()">
+          <button id="agent-connect-btn" class="agent-btn go" onclick="connectWebhook()">Connect</button>
+          <button id="agent-disconnect-btn" class="agent-btn stop" style="display:none" onclick="disconnectWebhook()">Stop</button>
+        </div>
+        <div id="agent-conn-status"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
 <script src="app.js"></script>
 </body>
 </html>
