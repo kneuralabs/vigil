@@ -173,11 +173,11 @@
       <div class="panel" data-screen-label="agent-connect">
         <div class="panel-hdr">
           <div class="panel-title"><span class="dot info"></span>Connect Intranet Agent</div>
-          <span class="badge ok">1-CLICK</span>
+          <span class="badge ok">AUTO-CONNECT</span>
         </div>
         <div class="oneclick">
-          <h4>&#x26A1; One-click setup — no configuration</h4>
-          <p>On any machine inside your network, paste <strong>one</strong> command into a terminal. It installs the agent, opens a secure tunnel, and reopens this dashboard already connected.</p>
+          <h4>&#x26A1; Zero-config — connects itself</h4>
+          <p>This dashboard <strong>finds and connects to your agent automatically</strong> — no URL to paste. It reconnects to a known agent on every visit and keeps watching for a local agent in the background. Just start the agent with the one command below; the dashboard does the rest.</p>
           <div class="cmd-row">
             <span class="os">Mac / Linux</span>
             <code class="step-cmd">curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash</code>
@@ -191,7 +191,7 @@
           <p style="margin:7px 0 0">Want a permanent URL that survives restarts? Add <code>--permanent --hostname agent.yourdomain.com</code> — see <code>agent/README.md</code>.</p>
         </div>
         <details class="manual">
-          <summary>Prefer to set it up by hand? Manual 3 steps</summary>
+          <summary>Agent on another host? Set it manually (optional)</summary>
           <div>
             <div class="agent-step">
               <div class="agent-step-num">1</div>
@@ -213,8 +213,8 @@
             <div class="agent-step">
               <div class="agent-step-num">3</div>
               <div>
-                <div class="agent-step-t">Paste the URL below &amp; Connect</div>
-                <div class="agent-step-d">The dashboard polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed.</div>
+                <div class="agent-step-t">Paste the URL below &amp; Connect <span style="color:var(--muted);font-weight:400">(only needed for a remote tunnel)</span></div>
+                <div class="agent-step-d">A local agent is detected automatically. For a remote tunnel, paste its <code>/events</code> URL once — the dashboard remembers it and reconnects on every future visit. It polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed.</div>
               </div>
             </div>
           </div>

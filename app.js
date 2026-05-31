@@ -369,6 +369,70 @@ async function runAllChecks(){
    ============================================================ */
 let webhookInterval=null;
 let seenEventKeys=new Set();
+let autoConnectTimer=null;       /* background watcher that connects the moment an agent appears */
+let userDisconnected=false;      /* set when the user clicks Stop, so we don't auto-reconnect over them */
+
+/* Where to remember a known-good agent endpoint across visits. */
+const AGENT_STORE_KEY='vigil.agentUrl';
+
+/* Candidate endpoints we try with zero user input, in priority order:
+   1) a remembered endpoint from a previous successful connection,
+   2) a local agent on the conventional port (same-machine / localhost case). */
+function agentCandidates(){
+  const list=[];
+  let saved=null;
+  try{saved=localStorage.getItem(AGENT_STORE_KEY);}catch(_){}
+  if(saved&&/^https?:\/\//i.test(saved))list.push(saved);
+  /* The agent listens on :8787 and serves /events with CORS enabled. */
+  ['http://localhost:8787/events','http://127.0.0.1:8787/events'].forEach(u=>{
+    if(list.indexOf(u)<0)list.push(u);
+  });
+  return list;
+}
+
+function rememberAgent(url){try{localStorage.setItem(AGENT_STORE_KEY,url);}catch(_){}}
+function forgetAgent(){try{localStorage.removeItem(AGENT_STORE_KEY);}catch(_){}}
+
+/* Probe a single candidate /events URL. Resolves to the URL if it answers
+   with valid JSON, else null. Kept short-timeout so the sweep stays snappy. */
+async function tryAgent(url){
+  try{
+    const ctrl=new AbortController();
+    const t=setTimeout(()=>ctrl.abort(),2500);
+    const r=await fetch(url,{cache:'no-store',signal:ctrl.signal});
+    clearTimeout(t);
+    if(!r.ok)return null;
+    await r.json();           /* must be valid JSON to count as a real agent */
+    return url;
+  }catch(_){return null;}
+}
+
+/* Fully automated connect: discover an agent from the candidate list and
+   connect to the first that responds — no typing, no button required. */
+async function autoConnectAgent(){
+  if(agentConnected||userDisconnected)return;
+  const cands=agentCandidates();
+  for(const url of cands){
+    const found=await tryAgent(url);
+    if(found){
+      const box=document.getElementById('webhook-url');
+      if(box)box.value=found;
+      connectWebhook(found);
+      return;
+    }
+  }
+}
+
+/* Background watcher: keep looking for an agent until one connects, so the
+   user never has to do anything even if they open the agent afterwards. */
+function startAutoConnectWatch(){
+  if(autoConnectTimer)clearInterval(autoConnectTimer);
+  autoConnectAgent();
+  autoConnectTimer=setInterval(()=>{
+    if(agentConnected||userDisconnected){clearInterval(autoConnectTimer);autoConnectTimer=null;return;}
+    autoConnectAgent();
+  },15000);
+}
 
 function tagForService(name){
   const m=INTRANET_SERVICES.find(s=>s.name===name);
@@ -422,7 +486,10 @@ function setAgentBadge(cls,text){
 
 function disconnectWebhook(){
   if(webhookInterval){clearInterval(webhookInterval);webhookInterval=null;}
+  if(autoConnectTimer){clearInterval(autoConnectTimer);autoConnectTimer=null;}
   agentConnected=false;
+  userDisconnected=true;     /* explicit user action — stop auto-reconnecting */
+  forgetAgent();             /* and don't silently reconnect to it next visit */
   document.getElementById('agent-connect-btn').style.display='';
   document.getElementById('agent-disconnect-btn').style.display='none';
   const radar=document.getElementById('probe-radar');if(radar)radar.classList.remove('live');
@@ -431,8 +498,11 @@ function disconnectWebhook(){
   addEvent('info','Agent Disconnected','Stopped polling the agent endpoint.');
 }
 
-function connectWebhook(){
-  const url=document.getElementById('webhook-url').value.trim();
+/* connectWebhook(url?) — url is optional; when omitted it falls back to the
+   input box. Auto-connect passes the discovered URL directly. */
+function connectWebhook(url){
+  userDisconnected=false;    /* a (re)connect attempt re-enables auto-reconnect */
+  if(typeof url!=='string'||!url){url=document.getElementById('webhook-url').value.trim();}
   if(!url){setConnStatus('Enter the agent <code>/events</code> URL first.','var(--warn)');return;}
   if(!/^https?:\/\//i.test(url)){setConnStatus('URL must start with http:// or https://','var(--warn)');return;}
   document.getElementById('agent-connect-btn').style.display='none';
@@ -482,6 +552,8 @@ function connectWebhook(){
       added++;
     });
     agentConnected=true;
+    rememberAgent(url);       /* persist so we silently reconnect next visit */
+    if(autoConnectTimer){clearInterval(autoConnectTimer);autoConnectTimer=null;}
     const radar=document.getElementById('probe-radar');if(radar)radar.classList.add('live');
     setAgentBadge('ok','AGENT CONNECTED');
     setConnStatus('Connected · '+events.length+' in buffer · '+added+' new · last poll '+new Date().toLocaleTimeString(),'var(--ok)');
@@ -514,6 +586,13 @@ window.addEventListener('load',()=>{
   document.addEventListener('visibilitychange',()=>{
     if(!document.hidden)runAllChecks();
   });
+  /* ---- fully automated agent connect (no user input required) ----
+     Priority:
+       1) an ?agent= link (one-click installer reopens the dashboard this way),
+       2) a remembered endpoint from a previous successful connection,
+       3) auto-discovery of a local agent on the conventional port.
+     The background watcher keeps trying until one connects, so the user
+     never has to type or click anything. */
   let agent=new URLSearchParams(location.search).get('agent');
   if(!agent){const m=location.hash.match(/agent=([^&]+)/);if(m)agent=m[1];}
   if(agent){
@@ -521,8 +600,17 @@ window.addEventListener('load',()=>{
     if(/^https?:\/\//i.test(agent)){
       const box=document.getElementById('webhook-url');
       if(box)box.value=agent;
+      rememberAgent(agent);
       setConnStatus('Auto-connecting to agent from link…');
-      setTimeout(connectWebhook,900);
+      setTimeout(()=>connectWebhook(agent),900);
+      return;
     }
   }
+  /* No link — try to discover/reconnect silently in the background. */
+  setConnStatus('Looking for an intranet agent automatically…');
+  setTimeout(startAutoConnectWatch,900);
+  /* Reconnect quickly when returning to the tab if we lost the agent. */
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden&&!agentConnected&&!userDisconnected)startAutoConnectWatch();
+  });
 });
