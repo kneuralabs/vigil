@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#030712">
+<meta name="description" content="Vigil — real-time SSL/TLS, DNS, certificate-transparency and intranet monitoring using free public APIs.">
 <title>Vigil™</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -103,12 +105,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .event-body{flex:1;min-width:0}
 .event-body strong{color:var(--text);font-weight:600;display:block;margin-bottom:1px;font-size:.7rem;overflow-wrap:anywhere}
 .event-body p{color:var(--muted);font-size:.65rem;overflow-wrap:anywhere}
-.intranet-notice{display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:20px;text-align:center;gap:8px;background:rgba(255,107,53,.04);border:1px dashed rgba(255,107,53,.3);
-  border-radius:10px;margin-bottom:10px}
-.intranet-notice h3{font-size:.82rem;font-weight:700;color:var(--warn)}
-.intranet-notice p{font-size:.68rem;color:var(--muted);max-width:360px;line-height:1.6}
-.intranet-notice code{font-size:.62rem;background:rgba(255,255,255,.08);padding:2px 6px;border-radius:4px;color:var(--accent)}
 .alarm-list{display:flex;flex-direction:column;gap:6px}
 .alarm{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
   background:rgba(255,255,255,.03);border:1px solid var(--border);transition:border-color .2s;font-size:.7rem}
@@ -515,12 +511,12 @@ async function checkSSLandCT(){
     document.getElementById('ssl-badge').textContent=daysLeft>60?'VALID':daysLeft>20?'EXPIRING SOON':'CRITICAL';
     document.getElementById('ssl-details').innerHTML=
       '<div class="cert-info">'+
-      '<div class="cert-row"><span class="cert-key">Common Name</span><span class="cert-val ok">'+(latest.common_name||PUBLIC_DOMAIN)+'</span></div>'+
-      '<div class="cert-row"><span class="cert-key">Issuer</span><span class="cert-val">'+issuer+'</span></div>'+
+      '<div class="cert-row"><span class="cert-key">Common Name</span><span class="cert-val ok">'+esc(latest.common_name||PUBLIC_DOMAIN)+'</span></div>'+
+      '<div class="cert-row"><span class="cert-key">Issuer</span><span class="cert-val">'+esc(issuer)+'</span></div>'+
       '<div class="cert-row"><span class="cert-key">Valid From</span><span class="cert-val">'+new Date(latest.not_before).toDateString().slice(4)+'</span></div>'+
       '<div class="cert-row"><span class="cert-key">Valid Until</span><span class="cert-val '+cls+'">'+expiry.toDateString().slice(4)+'</span></div>'+
       '<div class="cert-row"><span class="cert-key">Days Remaining</span><span class="cert-val '+cls+'">'+daysLeft+' days</span></div>'+
-      '<div class="cert-row"><span class="cert-key">CT Entry ID</span><span class="cert-val" style="font-size:.6rem">'+latest.id+'</span></div>'+
+      '<div class="cert-row"><span class="cert-key">CT Entry ID</span><span class="cert-val" style="font-size:.6rem">'+esc(latest.id)+'</span></div>'+
       '</div>';
 
     // CT panel
@@ -532,7 +528,7 @@ async function checkSSLandCT(){
       '<div class="cert-row"><span class="cert-key">Total CT Entries</span><span class="cert-val ok">'+data.length+'</span></div>'+
       '<div class="cert-row"><span class="cert-key">Latest Issuance</span><span class="cert-val">'+new Date(latest.not_before).toDateString().slice(4)+'</span></div>'+
       '<div style="margin:8px 0 5px;font-size:.62rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Domains Seen in CT Log</div>'+
-      sans.map(n=>'<div class="cert-row"><span class="cert-key">SAN</span><span class="cert-val" style="font-size:.62rem">'+n+'</span></div>').join('')+
+      sans.map(n=>'<div class="cert-row"><span class="cert-key">SAN</span><span class="cert-val" style="font-size:.62rem">'+esc(n)+'</span></div>').join('')+
       '</div>';
 
     addEvent('ok','SSL Cert Live','Expires in '+daysLeft+' days | Issuer: '+issuer+' | CT entries: '+data.length);
@@ -567,9 +563,7 @@ async function checkDNS(){
       document.getElementById('dns-badge').className='badge ok';
       document.getElementById('dns-badge').textContent='RESOLVED';
       document.getElementById('dns-details').innerHTML=
-        '<div class="dns-list">'+
-        rows.slice(0,12).map(r=>'<div class="dns-row"><span class="dns-type">'+r.type+'</span><span class="dns-val">'+r.val+'</span></div>').join('')+
-        '</div>';
+        rows.slice(0,12).map(r=>'<div class="dns-row"><span class="dns-type">'+r.type+'</span><span class="dns-val">'+esc(r.val)+'</span></div>').join('');
       addEvent('ok','DNS Resolved',rows.length+' records fetched via Google DoH');
     } else {
       setCard('dns','warn','?','No records returned');
