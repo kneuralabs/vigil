@@ -217,6 +217,12 @@ async function checkSSLandCT(){
     addEvent('ok','SSL Cert Live','Expires in '+daysLeft+' days · Issuer '+issuer+' · '+data.length+' CT entries');
   }catch(e){
     setCard('ssl','crit','ERR','crt.sh: '+e.message.slice(0,28));
+    setCard('certs','warn','&#x2014;','crt.sh unreachable',{pct:30});
+    setCard('issuer','warn','&#x2014;','crt.sh unreachable',{pct:30});
+    document.getElementById('ssl-badge').className='badge crit';
+    document.getElementById('ssl-badge').textContent='UNREACHABLE';
+    document.getElementById('crt-badge').className='badge crit';
+    document.getElementById('crt-badge').textContent='UNREACHABLE';
     addEvent('crit','SSL Check Failed',e.message);
     document.getElementById('ssl-details').innerHTML='<div class="cors-note">Error: '+esc(e.message)+'</div>';
     document.getElementById('crt-details').innerHTML='<div class="cors-note">Could not reach crt.sh</div>';

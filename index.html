@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#1c1a17">
-<meta name="description" content="Vigil — real-time SSL/TLS, DNS, certificate-transparency and intranet monitoring using free public APIs.">
-<title>Vigil™ — Sentinel</title>
+<meta name="theme-color" content="#F7F8FA">
+<meta name="description" content="Vigil by Kneuralabs — real-time SSL/TLS, DNS, certificate-transparency and intranet monitoring using free public APIs.">
+<title>Vigil™ by Kneuralabs — Continuous Surface Watch</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -16,15 +16,27 @@
 
   <header data-screen-label="header">
     <div class="logo">
-      <div class="mark"><b></b><i></i></div>
-      <div>
+      <div class="kn-mark" title="Kneuralabs">
+        <img class="kn-logo" src="LOGO.png" alt="Kneuralabs logo">
+        <span class="radar-overlay">
+          <span class="radar-grid"></span>
+          <span class="radar-rings"></span>
+          <span class="radar-sweep"></span>
+          <span class="radar-blip"></span>
+        </span>
+      </div>
+      <div class="wordmark">
         <h1>Vigil<sup class="tm">&trade;</sup></h1>
-        <div class="tag">Continuous Surface Watch</div>
+        <div class="tag"><span class="tag-pip"></span>Kneuralabs · Continuous Surface Watch</div>
       </div>
     </div>
     <div class="hdr-right">
       <div class="live-badge"><span class="live-dot"></span>LIVE</div>
       <div class="clock" id="clock">Loading…</div>
+      <button class="theme-toggle" id="theme-toggle" title="Toggle dark / light" aria-label="Toggle dark or light theme">
+        <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+      </button>
       <button class="refresh-btn" id="refresh-btn" onclick="runAllChecks()"><span class="ico">&#x21BB;</span>Refresh</button>
     </div>
   </header>
@@ -78,6 +90,15 @@
       <div class="kpi-track"><i id="track-intranet"></i></div>
       <div class="stat-sub" id="sub-intranet">Awaiting probe</div>
     </div>
+  </div>
+
+  <div class="terminal" data-screen-label="monitor-terminal">
+    <div class="term-bar">
+      <div class="term-dots"><span></span><span></span><span></span></div>
+      <div class="term-title">vigil-monitor — watch · kneuralabs.com</div>
+      <div class="term-stat"><span class="term-pulse"></span><span id="term-state">WATCHING</span></div>
+    </div>
+    <div class="term-body" id="term-body"></div>
   </div>
 
   <div class="section-label">
@@ -230,6 +251,13 @@
   </div>
 
 </div>
+<div id="tweaks-root"></div>
 <script src="app.js"></script>
+<script src="enhance.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="app-tweaks.jsx"></script>
 </body>
 </html>
