@@ -321,17 +321,34 @@ async function checkDNS(force){
 /* ============================================================
    INTRANET — live browser reachability sweep (with latency bars)
    ============================================================ */
+/* Best-effort intranet target derived from the public surface domain, e.g.
+   kneuralabs.com -> https://intranet.kneuralabs.com. Lets the sweep always
+   run against something sensible with no separate manual URL entry. */
+function intranetDefaultFromPublic(){
+  const pub=(document.getElementById('public-url')||{}).value||'';
+  const host=hostFromUrl((pub||PUBLIC_DOMAIN||'').trim());
+  if(!host)return '';
+  if(/^intranet\./i.test(host))return 'https://'+host;
+  return 'https://intranet.'+host;
+}
 async function checkIntranet(){
   if(agentConnected){
     addEvent('info','Intranet','Agent connected — rows reflect live HTTP status from the /status feed.');
     return;
   }
   const probe=document.getElementById('intranet-probe');
-  const raw=document.getElementById('intranet-url-input').value.trim();
+  let raw=document.getElementById('intranet-url-input').value.trim();
   const titleEl=document.getElementById('intranet-probe-title');
   const noteEl=document.getElementById('intranet-probe-note');
   const badge=document.getElementById('agent-badge');
   const radar=document.getElementById('probe-radar');
+  /* No intranet URL typed in? Derive one from the public surface domain and
+     fill it back in, so the sweep always has a target without manual entry. */
+  if(!raw){
+    raw=intranetDefaultFromPublic();
+    const box=document.getElementById('intranet-url-input');
+    if(box&&raw)box.value=raw;
+  }
   if(!raw){
     probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No intranet URL entered.</div>';
     setCard('intranet','warn','&#x2014;','No URL');
