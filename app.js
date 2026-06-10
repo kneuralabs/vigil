@@ -43,6 +43,30 @@ const INTRANET_SERVICES=[
   {name:'VPN Gateway',       path:'/vpn',      tag:'VPN'},
   {name:'API Gateway',       path:'/api',      tag:'API'}
 ];
+/* Active probe list. Defaults to the hardcoded set above; replaced by the
+   agent's /config service list once an agent connects, so the agent's
+   config.json is the single source of truth when one is available. */
+let intranetServices=INTRANET_SERVICES;
+function makeTag(name){
+  const m=INTRANET_SERVICES.find(s=>s.name===name);
+  if(m)return m.tag;
+  return String(name||'SVC').replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||'SVC';
+}
+async function fetchAgentServices(configUrl){
+  try{
+    const r=await fetch(configUrl,{cache:'no-store'});
+    if(!r.ok)return;
+    const c=await r.json();
+    if(!c||typeof c!=='object'||!Array.isArray(c.services))return;
+    const list=c.services
+      .filter(s=>s&&typeof s==='object'&&s.name&&s.url)
+      .map(s=>({name:String(s.name),url:String(s.url),tag:makeTag(s.name)}));
+    if(list.length){
+      intranetServices=list;
+      addEvent('info','Agent Config','Probe list synced from agent: '+list.length+' service(s).');
+    }
+  }catch(_){/* /config endpoint optional — keep hardcoded defaults */}
+}
 let agentConnected=false;
 let scanning=false;          /* re-entrancy guard so auto-refresh never overlaps a run */
 let autoRefreshTimer=null;   /* periodic re-scan keeps the public data live, not a snapshot */
@@ -320,15 +344,15 @@ async function checkIntranet(){
   try{base=new URL(raw).origin;}
   catch(_){try{base=new URL('https://'+raw).origin;}catch(__){base='https://'+host;}}
 
-  titleEl.textContent='Probing '+INTRANET_SERVICES.length+' services…';titleEl.style.color='var(--info)';
+  titleEl.textContent='Probing '+intranetServices.length+' services…';titleEl.style.color='var(--info)';
   if(radar)radar.classList.add('live');
   noteEl.innerHTML='Running live reachability probes against <strong>'+esc(host)+'</strong> endpoints from your browser…';
-  probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Sweeping '+INTRANET_SERVICES.length+' endpoints…</div>';
+  probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Sweeping '+intranetServices.length+' endpoints…</div>';
   if(!agentConnected){badge.className='badge info';badge.textContent='SCANNING…';}
-  addEvent('info','Intranet Sweep','Probing '+INTRANET_SERVICES.length+' '+host+' endpoints from your browser…');
+  addEvent('info','Intranet Sweep','Probing '+intranetServices.length+' '+host+' endpoints from your browser…');
 
-  const results=await Promise.all(INTRANET_SERVICES.map(async svc=>{
-    const url=base+svc.path;
+  const results=await Promise.all(intranetServices.map(async svc=>{
+    const url=svc.url?svc.url:base+svc.path;
     const r=await probeOne(url,6000);
     return Object.assign({url:url},svc,r);
   }));
@@ -470,8 +494,8 @@ function startAutoConnectWatch(){
 }
 
 function tagForService(name){
-  const m=INTRANET_SERVICES.find(s=>s.name===name);
-  return m?m.tag:'SVC';
+  const m=intranetServices.find(s=>s.name===name);
+  return m?m.tag:makeTag(name);
 }
 
 function renderAgentStatus(s){
@@ -548,6 +572,8 @@ function connectWebhook(url){
   if(webhookInterval)clearInterval(webhookInterval);
   seenEventKeys=new Set();
   const statusUrl=/\/events(\?|$)/.test(url)?url.replace(/\/events(\?|$)/,'/status$1'):null;
+  const configUrl=/\/events(\?|$)/.test(url)?url.replace(/\/events(\?|$)/,'/config$1'):null;
+  let configSynced=false;
 
   /* Circuit breaker: stop polling after this many consecutive failures so a
      dead agent doesn't generate endless failed requests + feed noise. */
@@ -606,6 +632,7 @@ function connectWebhook(url){
     });
     agentConnected=true;
     rememberAgent(url);       /* persist so we silently reconnect next visit */
+    if(configUrl&&!configSynced){configSynced=true;fetchAgentServices(configUrl);}
     if(autoConnectTimer){clearInterval(autoConnectTimer);autoConnectTimer=null;}
     const radar=document.getElementById('probe-radar');if(radar)radar.classList.add('live');
     setAgentBadge('ok','AGENT CONNECTED');

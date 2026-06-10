@@ -447,6 +447,12 @@ def make_handler(config, log, monitor):
                 if not self._authorized():
                     return self._json(401, {"error": "unauthorized"})
                 return self._json(200, monitor.status_snapshot())
+            if path == "/config":
+                if not self._authorized():
+                    return self._json(401, {"error": "unauthorized"})
+                return self._json(200, {"services": [
+                    {"name": s.name, "url": s.url} for s in monitor.services
+                ]})
             if path == "/health":
                 return self._json(200, {"status": "ok", "time": now_iso()})
             return self._json(404, {"error": "not found"})
@@ -487,6 +493,7 @@ def main():
 
     print("Vigil agent listening on http://{}:{}".format(host, port))
     print("  /events  rolling event log   /status  live per-service codes + flags")
+    print("  /config  service list (dashboard probe sync)   /health  liveness")
     print("Monitoring {} service(s) every {}s".format(
         len(cfg.get("services", [])), cfg.get("poll_interval_seconds", 30)))
     # Startup configuration summary (never prints secret values).
