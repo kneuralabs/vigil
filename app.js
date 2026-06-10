@@ -46,6 +46,23 @@ const INTRANET_SERVICES=[
 let agentConnected=false;
 let scanning=false;          /* re-entrancy guard so auto-refresh never overlaps a run */
 let autoRefreshTimer=null;   /* periodic re-scan keeps the public data live, not a snapshot */
+let lastRefresh=0;           /* timestamp of the last completed/started scan (manual or auto) */
+
+/* ---------- localStorage cache for public API results (5-minute TTL) ---------- */
+const API_CACHE_TTL_MS=5*60*1000;
+function cacheKey(check,domain){return 'vigil.cache.'+check+'.'+domain;}
+function cacheGet(check,domain){
+  try{
+    const raw=localStorage.getItem(cacheKey(check,domain));
+    if(!raw)return null;
+    const obj=JSON.parse(raw);
+    if(!obj||typeof obj!=='object'||(Date.now()-obj.t)>API_CACHE_TTL_MS)return null;
+    return obj.d;
+  }catch(_){return null;}
+}
+function cacheSet(check,domain,data){
+  try{localStorage.setItem(cacheKey(check,domain),JSON.stringify({t:Date.now(),d:data}));}catch(_){}
+}
 
 /* ---------- count-up animation for KPI numbers ---------- */
 function animateCount(el,to,suffix,dur){
@@ -136,12 +153,18 @@ async function probeOne(url,timeoutMs){
 /* ============================================================
    SSL / CT — live crt.sh, with validity timeline + histogram
    ============================================================ */
-async function checkSSLandCT(){
+async function checkSSLandCT(force){
   try{
-    addEvent('info','SSL &amp; CT Scan','Querying crt.sh for '+PUBLIC_DOMAIN+'…');
-    const r=await fetch('https://crt.sh/?q='+encodeURIComponent(PUBLIC_DOMAIN)+'&output=json');
-    if(!r.ok)throw new Error('crt.sh HTTP '+r.status);
-    const data=await r.json();
+    let data=force?null:cacheGet('crtsh',PUBLIC_DOMAIN);
+    if(data){
+      addEvent('info','SSL &amp; CT Scan','Using cached crt.sh data for '+PUBLIC_DOMAIN+' (≤5 min old)');
+    }else{
+      addEvent('info','SSL &amp; CT Scan','Querying crt.sh for '+PUBLIC_DOMAIN+'…');
+      const r=await fetch('https://crt.sh/?q='+encodeURIComponent(PUBLIC_DOMAIN)+'&output=json');
+      if(!r.ok)throw new Error('crt.sh HTTP '+r.status);
+      data=await r.json();
+      cacheSet('crtsh',PUBLIC_DOMAIN,data);
+    }
     if(!data||!data.length){setCard('ssl','warn','None','No certs in CT log');return;}
 
     const sorted=data.slice().sort((a,b)=>new Date(b.not_after)-new Date(a.not_after));
@@ -232,7 +255,7 @@ async function checkSSLandCT(){
 /* ============================================================
    DNS — live Google DoH
    ============================================================ */
-async function checkDNS(){
+async function checkDNS(force){
   const types=[{t:'A',code:1},{t:'AAAA',code:28},{t:'MX',code:15},{t:'NS',code:2},{t:'TXT',code:16},{t:'CAA',code:257}];
   const rows=[];
   let hasMX=false;
@@ -240,8 +263,12 @@ async function checkDNS(){
     addEvent('info','DNS Probe','Google DoH resolving '+PUBLIC_DOMAIN+' records…');
     for(const {t,code} of types){
       try{
-        const r=await fetch('https://dns.google/resolve?name='+encodeURIComponent(PUBLIC_DOMAIN)+'&type='+code);
-        const d=await r.json();
+        let d=force?null:cacheGet('doh-'+t,PUBLIC_DOMAIN);
+        if(!d){
+          const r=await fetch('https://dns.google/resolve?name='+encodeURIComponent(PUBLIC_DOMAIN)+'&type='+code);
+          d=await r.json();
+          cacheSet('doh-'+t,PUBLIC_DOMAIN,d);
+        }
         if(d.Answer){
           d.Answer.forEach(a=>{rows.push({type:t,val:a.data});});
           if(t==='MX'){hasMX=true;setCard('mx','ok','MX','Mail configured',{pct:100});}
@@ -338,13 +365,15 @@ async function checkIntranet(){
 /* ============================================================
    Orchestration
    ============================================================ */
-async function runAllChecks(){
+async function runAllChecks(opts){
+  const force=!!(opts&&opts.force);   /* manual user-triggered refresh bypasses the cache */
   const btn=document.getElementById('refresh-btn');
   const scanBtn=document.getElementById('scan-btn');
   const pub=document.getElementById('public-url').value.trim();
   if(!pub){alert('Please enter a Public Surface URL');return;}
   if(scanning)return;            /* a run is already in flight — let it finish */
   scanning=true;
+  lastRefresh=Date.now();
   PUBLIC_DOMAIN=hostFromUrl(pub);
   document.getElementById('public-domain-label').textContent=PUBLIC_DOMAIN;
 
@@ -362,7 +391,7 @@ async function runAllChecks(){
   document.getElementById('event-feed').innerHTML='';
   addEvent('info','Scan Started','Live checks on '+PUBLIC_DOMAIN+' via crt.sh + Google DoH (100% free, no API key)');
 
-  await Promise.all([checkSSLandCT(),checkDNS(),checkIntranet()]);
+  await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet()]);
 
   addEvent('ok','Scan Complete','Public APIs + intranet probe done. Connect the agent for live internal events.');
   btn.disabled=false;btn.innerHTML='<span class="ico">&#x21BB;</span>Refresh';
@@ -446,7 +475,7 @@ function tagForService(name){
 }
 
 function renderAgentStatus(s){
-  if(!s||!Array.isArray(s.services))return false;
+  if(!s||typeof s!=='object'||!Array.isArray(s.services))return false;   /* defensive: malformed /status payload */
   const probe=document.getElementById('intranet-probe');
   const titleEl=document.getElementById('intranet-probe-title');
   const noteEl=document.getElementById('intranet-probe-note');
@@ -520,6 +549,20 @@ function connectWebhook(url){
   seenEventKeys=new Set();
   const statusUrl=/\/events(\?|$)/.test(url)?url.replace(/\/events(\?|$)/,'/status$1'):null;
 
+  /* Circuit breaker: stop polling after this many consecutive failures so a
+     dead agent doesn't generate endless failed requests + feed noise. */
+  const MAX_CONSEC_FAILURES=5;
+  let consecFailures=0;
+  function pollFailed(){
+    consecFailures++;
+    if(consecFailures>=MAX_CONSEC_FAILURES&&webhookInterval){
+      clearInterval(webhookInterval);webhookInterval=null;
+      setAgentBadge('crit','AGENT OFFLINE');
+      setConnStatus('Stopped polling after '+consecFailures+' consecutive failures. Click Connect to retry.','var(--crit)');
+      addEvent('crit','Agent Polling Stopped',consecFailures+' consecutive failures — circuit breaker opened. Reconnect to retry.');
+    }
+  }
+
   async function poll(){
     let r;
     try{r=await fetch(url,{cache:'no-store'});}
@@ -528,6 +571,7 @@ function connectWebhook(url){
       setAgentBadge('crit','UNREACHABLE');
       setConnStatus('Cannot reach endpoint (network or CORS). Check the agent is running and the URL is publicly reachable.','var(--crit)');
       addEvent('crit','Agent Unreachable','Could not reach '+esc(url)+' — verify the tunnel/agent and that CORS is allowed.');
+      pollFailed();
       return;
     }
     if(!r.ok){
@@ -535,6 +579,7 @@ function connectWebhook(url){
       setAgentBadge('crit','HTTP '+r.status);
       setConnStatus('Endpoint returned HTTP '+r.status+'.','var(--crit)');
       addEvent('crit','Agent HTTP Error',esc(url)+' returned HTTP '+r.status);
+      pollFailed();
       return;
     }
     let data;
@@ -544,8 +589,10 @@ function connectWebhook(url){
       setAgentBadge('crit','BAD JSON');
       setConnStatus('Response was not valid JSON. Expected an array of {type,title,message}.','var(--crit)');
       addEvent('crit','Agent Bad Response',esc(url)+' did not return JSON.');
+      pollFailed();
       return;
     }
+    consecFailures=0;   /* success — reset the breaker */
     const events=Array.isArray(data)?data:[data];
     let added=0;
     events.forEach(e=>{
@@ -565,7 +612,16 @@ function connectWebhook(url){
     setConnStatus('Connected · '+events.length+' in buffer · '+added+' new · last poll '+new Date().toLocaleTimeString(),'var(--ok)');
 
     if(statusUrl){
-      try{const sr=await fetch(statusUrl,{cache:'no-store'});if(sr.ok){renderAgentStatus(await sr.json());}}
+      try{
+        const sr=await fetch(statusUrl,{cache:'no-store'});
+        if(sr.ok){
+          const s=await sr.json();
+          /* schema check: must be a plain object with a services array */
+          if(s&&typeof s==='object'&&!Array.isArray(s)&&Array.isArray(s.services)){
+            renderAgentStatus(s);
+          }
+        }
+      }
       catch(_){/* status endpoint optional */}
     }
   }
@@ -586,6 +642,7 @@ window.addEventListener('load',()=>{
   if(autoRefreshTimer)clearInterval(autoRefreshTimer);
   autoRefreshTimer=setInterval(()=>{
     if(document.hidden)return;
+    if(Date.now()-lastRefresh<60000)return;   /* dedup: a refresh ran within the last 60s */
     runAllChecks();
   },AUTO_REFRESH_MS);
   /* refresh promptly when returning to a tab that was hidden */

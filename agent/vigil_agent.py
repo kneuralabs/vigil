@@ -237,92 +237,101 @@ class Monitor(threading.Thread):
         server_err = 0
 
         for svc in self.services:
-            code, latency = self._http_check(svc.url)
-            category, note = categorize(code, latency, slow)
-            flags = []
-
-            prev_code = svc.code
-            prev_cat = svc.category
-
-            # availability / status-code transitions
-            if prev_cat is None:
-                self.log.add(category, svc.name,
-                             ("unreachable" if code == 0 else "HTTP %d" % code) +
-                             " (%d ms)" % latency,
-                             service=svc.name, code=code, latency_ms=latency,
-                             category=category, kind="status")
-            elif category != prev_cat or code != prev_code:
-                msg = ("now unreachable" if code == 0 else "HTTP %d (%s)" % (code, note)) + \
-                      " — was %s" % ("unreachable" if prev_code == 0 else "HTTP %d" % prev_code)
-                self.log.add(category, svc.name, msg + " · %d ms" % latency,
-                             service=svc.name, code=code, latency_ms=latency,
-                             category=category, kind="status")
-
-            # latency-spike anomaly (needs a baseline)
-            if code != 0 and len(svc.lat_hist) >= 5:
-                baseline = statistics.median(svc.lat_hist)
-                threshold = max(floor, factor * baseline)
-                if latency > threshold:
-                    if not svc.was_anomalous:
-                        flags.append("latency spike %dms (baseline ~%dms)" % (latency, int(baseline)))
-                        self.log.add("warn", "⚠ Anomaly · " + svc.name,
-                                     "Latency spike: %d ms vs baseline ~%d ms — possible resource exhaustion/DoS"
-                                     % (latency, int(baseline)),
-                                     service=svc.name, code=code, latency_ms=latency,
-                                     category="warn", kind="anomaly")
-                    svc.was_anomalous = True
-                else:
-                    svc.was_anomalous = False
-            if code != 0:
-                svc.lat_hist.append(latency)
-
-            # expected-status assertion (config-driven breach/anomaly signal)
-            if svc.expect_status is not None:
-                if code == svc.expect_status:
-                    svc.expect_violation_active = False
-                elif svc.expect_status in (401, 403) and code == 200:
-                    flags.append("expected %d, got 200 (possible auth bypass/exposure)" % svc.expect_status)
-                    if not svc.expect_violation_active:
-                        self.log.add("crit", "\U0001F6A8 Security · " + svc.name,
-                                     "Protected route expected HTTP %d but returned 200 — possible authentication bypass or data exposure."
-                                     % svc.expect_status,
-                                     service=svc.name, code=code, latency_ms=latency,
-                                     category="crit", kind="security")
-                    svc.expect_violation_active = True
-                elif code != 0:
-                    flags.append("expected %d, got %d" % (svc.expect_status, code))
-                    svc.expect_violation_active = False
-
-            # cert expiry (best effort, throttled)
-            days = self._cert_days_left(svc.url)
-            if days is not None:
-                cert_min = self.cfg.get("cert_min_days", 14)
-                if days < cert_min:
-                    flags.append("TLS cert expires in %d days" % days)
-                    if not self._cert_flagged.get(svc.url):
-                        sev = "crit" if days < 3 else "warn"
-                        self.log.add(sev, "⚠ Anomaly · " + svc.name,
-                                     "TLS certificate expires in %d day(s)." % days,
-                                     service=svc.name, code=code, latency_ms=latency,
-                                     category=sev, kind="anomaly")
-                    self._cert_flagged[svc.url] = True
-                else:
-                    self._cert_flagged[svc.url] = False
-
-            # tally cross-service breach signals
-            if code in (401, 403):
+            # Isolate each service's check: one failing service (e.g. an
+            # exception in cert checking) must not abort the rest of the cycle.
+            try:
+                self._check_service(svc, slow, floor, factor)
+            except Exception as e:
+                self.log.add("warn", "Monitor Error · " + svc.name,
+                             "check failed: %s" % e,
+                             service=svc.name, category="warn", kind="status")
+                continue
+            if svc.code in (401, 403):
                 auth_fail += 1
-            if code >= 500:
+            if svc.code is not None and svc.code >= 500:
                 server_err += 1
 
-            with self._lock:
-                svc.code = code
-                svc.category = category
-                svc.latency_ms = latency
-                svc.checked = now_iso()
-                svc.flags = flags
-
         self._breach_signals(auth_fail, server_err)
+
+    def _check_service(self, svc, slow, floor, factor):
+        code, latency = self._http_check(svc.url)
+        category, note = categorize(code, latency, slow)
+        flags = []
+
+        prev_code = svc.code
+        prev_cat = svc.category
+
+        # availability / status-code transitions
+        if prev_cat is None:
+            self.log.add(category, svc.name,
+                         ("unreachable" if code == 0 else "HTTP %d" % code) +
+                         " (%d ms)" % latency,
+                         service=svc.name, code=code, latency_ms=latency,
+                         category=category, kind="status")
+        elif category != prev_cat or code != prev_code:
+            msg = ("now unreachable" if code == 0 else "HTTP %d (%s)" % (code, note)) + \
+                  " — was %s" % ("unreachable" if prev_code == 0 else "HTTP %d" % prev_code)
+            self.log.add(category, svc.name, msg + " · %d ms" % latency,
+                         service=svc.name, code=code, latency_ms=latency,
+                         category=category, kind="status")
+
+        # latency-spike anomaly (needs a baseline)
+        if code != 0 and len(svc.lat_hist) >= 5:
+            baseline = statistics.median(svc.lat_hist)
+            threshold = max(floor, factor * baseline)
+            if latency > threshold:
+                if not svc.was_anomalous:
+                    flags.append("latency spike %dms (baseline ~%dms)" % (latency, int(baseline)))
+                    self.log.add("warn", "⚠ Anomaly · " + svc.name,
+                                 "Latency spike: %d ms vs baseline ~%d ms — possible resource exhaustion/DoS"
+                                 % (latency, int(baseline)),
+                                 service=svc.name, code=code, latency_ms=latency,
+                                 category="warn", kind="anomaly")
+                svc.was_anomalous = True
+            else:
+                svc.was_anomalous = False
+        if code != 0:
+            svc.lat_hist.append(latency)
+
+        # expected-status assertion (config-driven breach/anomaly signal)
+        if svc.expect_status is not None:
+            if code == svc.expect_status:
+                svc.expect_violation_active = False
+            elif svc.expect_status in (401, 403) and code == 200:
+                flags.append("expected %d, got 200 (possible auth bypass/exposure)" % svc.expect_status)
+                if not svc.expect_violation_active:
+                    self.log.add("crit", "\U0001F6A8 Security · " + svc.name,
+                                 "Protected route expected HTTP %d but returned 200 — possible authentication bypass or data exposure."
+                                 % svc.expect_status,
+                                 service=svc.name, code=code, latency_ms=latency,
+                                 category="crit", kind="security")
+                svc.expect_violation_active = True
+            elif code != 0:
+                flags.append("expected %d, got %d" % (svc.expect_status, code))
+                svc.expect_violation_active = False
+
+        # cert expiry (best effort, throttled)
+        days = self._cert_days_left(svc.url)
+        if days is not None:
+            cert_min = self.cfg.get("cert_min_days", 14)
+            if days < cert_min:
+                flags.append("TLS cert expires in %d days" % days)
+                if not self._cert_flagged.get(svc.url):
+                    sev = "crit" if days < 3 else "warn"
+                    self.log.add(sev, "⚠ Anomaly · " + svc.name,
+                                 "TLS certificate expires in %d day(s)." % days,
+                                 service=svc.name, code=code, latency_ms=latency,
+                                 category=sev, kind="anomaly")
+                self._cert_flagged[svc.url] = True
+            else:
+                self._cert_flagged[svc.url] = False
+
+        with self._lock:
+            svc.code = code
+            svc.category = category
+            svc.latency_ms = latency
+            svc.checked = now_iso()
+            svc.flags = flags
 
     def _breach_signals(self, auth_fail, server_err):
         # Auth-failure burst (possible credential-stuffing / brute force).
@@ -480,6 +489,20 @@ def main():
     print("  /events  rolling event log   /status  live per-service codes + flags")
     print("Monitoring {} service(s) every {}s".format(
         len(cfg.get("services", [])), cfg.get("poll_interval_seconds", 30)))
+    # Startup configuration summary (never prints secret values).
+    print("Config: tls_verify={} auth_token={} webhook={} event_buffer={}".format(
+        "on" if cfg.get("verify_tls", True) else "OFF (insecure)",
+        "yes" if (cfg.get("auth_token") or "").strip() else "no",
+        "yes" if cfg.get("webhook_url") else "no",
+        cfg.get("event_buffer_size", 200)))
+    print("Thresholds: slow={}ms latency_floor={}ms latency_factor={} "
+          "auth_burst={} error_storm={} cert_min_days={}".format(
+        cfg.get("slow_threshold_ms", 1500),
+        cfg.get("latency_anomaly_floor_ms", 800),
+        cfg.get("latency_anomaly_factor", 3.0),
+        cfg.get("auth_failure_burst", 3),
+        cfg.get("server_error_storm", 3),
+        cfg.get("cert_min_days", 14)))
     if cfg.get("webhook_url"):
         print("Pushing events to webhook: {}".format(cfg["webhook_url"]))
 
