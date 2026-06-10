@@ -135,7 +135,32 @@ inbound ever touches your network.
 | `verify_tls` | `true` | Set `false` only for internal self-signed certs. |
 | `auth_token` | `""` | If set, `/events` requires the token (query or Bearer). |
 | `webhook_url` | `""` | If set, events are also POSTed here (Option B). |
-| `services` | 7 intranet apps | `[{ "name", "url" }]` list to monitor. |
+| `auto_discover` | `true` | Continuously enumerate targets so you never hand-maintain `services`. |
+| `discover_domains` | `[]` | Domains to enumerate. Empty → derived from the apex of each seed service host. |
+| `discover_via_crtsh` | `true` | Pull every subdomain ever issued a cert from crt.sh CT logs. |
+| `discover_paths` | 12 common paths | Conventional paths swept on each discovered host. |
+| `discover_interval_seconds` | `1800` | How often discovery re-runs to pick up new subdomains/services. |
+| `max_discovered_services` | `200` | Safety cap on how many services discovery may add. |
+| `services` | 2 seed apps | `[{ "name", "url", "expect_status?" }]`. Optional when `auto_discover` is on — a seed or two bootstraps it. |
+
+### Automatic discovery (zero manual service list)
+
+With `auto_discover` on (the default), you no longer maintain a service list by
+hand. On startup and every `discover_interval_seconds`, the agent:
+
+1. **Derives the domains to enumerate** — either `discover_domains`, or the
+   registrable apex of every seed service host (e.g. a single
+   `https://intranet.kneuralabs.com` seed enumerates all of `kneuralabs.com`).
+2. **Enumerates every subdomain** ever issued a certificate, via the public
+   crt.sh Certificate Transparency log — catching intranet, internet, and
+   arbitrarily-nested subdomains alike.
+3. **Sweeps conventional paths** (`discover_paths`) on each discovered host.
+4. **Merges new live targets** into the monitored set (deduped by URL, capped by
+   `max_discovered_services`) and emits an `Auto-Discovery` event.
+
+A single seed service is enough to bootstrap full-surface monitoring; the
+dashboard's `/config` sync then reflects the discovered list automatically. Set
+`auto_discover: false` to pin a static `services` list instead.
 
 ### Status logic
 

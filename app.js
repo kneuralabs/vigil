@@ -14,6 +14,39 @@ function ts(){return new Date().toTimeString().slice(0,8);}
 
 let PUBLIC_DOMAIN='kneuralabs.com';
 
+/* Subdomains auto-enumerated from crt.sh CT data on each scan.
+   { host: {expiry:Date|null, daysLeft:number|null} } — the single source of
+   truth for the subdomain surface sweep, so no list is ever maintained by hand. */
+let DISCOVERED_SUBS={};
+/* Cap the live reachability sweep so a domain with hundreds of CT entries
+   doesn't fire hundreds of concurrent probes from the browser. */
+const MAX_SUBDOMAIN_PROBES=60;
+
+/* Build the host -> latest-cert map from crt.sh rows (common_name + SANs),
+   restricted to the current apex domain, wildcards/dupes removed. */
+function buildSubdomains(certs){
+  const map={};
+  certs.forEach(c=>{
+    const names=[];
+    if(c.common_name)names.push(c.common_name);
+    if(c.name_value)String(c.name_value).split('\n').forEach(n=>names.push(n));
+    const exp=new Date(c.not_after);
+    names.forEach(raw=>{
+      let h=String(raw||'').trim().toLowerCase().replace(/\.$/,'');
+      if(!h||h.indexOf('*')>=0||h.indexOf(' ')>=0)return;
+      if(h!==PUBLIC_DOMAIN&&!h.endsWith('.'+PUBLIC_DOMAIN))return;
+      const cur=map[h];
+      if(!cur||(!isNaN(exp)&&exp>cur.expiry)){map[h]={expiry:isNaN(exp)?null:exp};}
+    });
+  });
+  const now=Date.now();
+  Object.keys(map).forEach(h=>{
+    const e=map[h].expiry;
+    map[h].daysLeft=e?Math.floor((e-now)/864e5):null;
+  });
+  return map;
+}
+
 function hostFromUrl(raw){
   let h=raw.trim();
   try{h=new URL(h).host;}catch(_){h=h.replace(/^[a-z]+:\/\//i,'').split('/')[0];}
@@ -192,6 +225,7 @@ async function checkSSLandCT(force){
     if(!data||!data.length){setCard('ssl','warn','None','No certs in CT log');return;}
 
     const sorted=data.slice().sort((a,b)=>new Date(b.not_after)-new Date(a.not_after));
+    DISCOVERED_SUBS=buildSubdomains(sorted);
     const latest=sorted[0];
     const notBefore=new Date(latest.not_before);
     const expiry=new Date(latest.not_after);
@@ -404,6 +438,76 @@ async function checkIntranet(){
 }
 
 /* ============================================================
+   SUBDOMAINS — auto-enumerated from CT log, live reachability sweep
+   ============================================================ */
+function rankSub(h){
+  /* apex first, then www, then shallow names, then the rest alphabetically */
+  if(h===PUBLIC_DOMAIN)return '0';
+  if(h==='www.'+PUBLIC_DOMAIN)return '1';
+  return '2'+String(h.split('.').length)+h;
+}
+async function checkSubdomains(){
+  const list=document.getElementById('subdomain-list');
+  const titleEl=document.getElementById('subs-title');
+  const noteEl=document.getElementById('subs-note');
+  const badge=document.getElementById('subs-badge');
+  const radar=document.getElementById('subs-radar');
+  const lbl=document.getElementById('subdomain-domain-label');
+  if(lbl)lbl.textContent='*.'+PUBLIC_DOMAIN;
+
+  let hosts=Object.keys(DISCOVERED_SUBS).sort((a,b)=>rankSub(a)<rankSub(b)?-1:1);
+  if(!hosts.length){
+    setCard('subs','warn','0','None in CT log',{pct:20});
+    badge.className='badge warn';badge.textContent='NONE FOUND';
+    titleEl.textContent='No subdomains in CT log';titleEl.style.color='var(--warn)';
+    noteEl.textContent='crt.sh returned no certificates for this domain, so there is nothing to enumerate.';
+    list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No subdomains discovered.</div>';
+    return;
+  }
+  const total=hosts.length;
+  const probed=hosts.slice(0,MAX_SUBDOMAIN_PROBES);
+
+  if(radar)radar.classList.add('live');
+  badge.className='badge info';badge.textContent='PROBING '+probed.length+'…';
+  titleEl.textContent='Probing '+probed.length+' of '+total+' subdomains…';titleEl.style.color='var(--info)';
+  list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Sweeping '+probed.length+' subdomains…</div>';
+  addEvent('info','Subdomain Enumeration',total+' subdomain(s) found in CT log · live-probing '+probed.length+'…');
+
+  const results=await Promise.all(probed.map(async h=>{
+    const r=await probeOne('https://'+h,6000);
+    return Object.assign({host:h},DISCOVERED_SUBS[h],r);
+  }));
+
+  let up=0;
+  const maxMs=Math.max(1,...results.map(r=>r.ms||0));
+  const rows=results.map(r=>{
+    const latPct=Math.max(6,Math.min(100,Math.round((r.ms/maxMs)*100)));
+    const tag=r.host===PUBLIC_DOMAIN?'APEX':(r.host.split('.')[0]||'SUB').slice(0,4).toUpperCase();
+    let cert='';
+    if(r.daysLeft!=null){
+      const cc=r.daysLeft>20?'ok':r.daysLeft>0?'warn':'crit';
+      cert=' &middot; <span style="color:var(--'+cc+')">cert '+r.daysLeft+'d</span>';
+    }
+    if(r.ok){
+      up++;
+      const slow=r.ms>1500;
+      return intranetRow(tag,r.host,r.ms+' ms'+cert,slow?'warn':'ok',slow?'SLOW':'REACHABLE',latPct);
+    }
+    return intranetRow(tag,r.host,(r.why==='timeout'?'timed out (6s)':'no response')+cert,'crit',r.why==='timeout'?'TIMEOUT':'DOWN',latPct);
+  }).join('');
+  list.innerHTML=rows;
+  animateBars('#subdomain-list .lat i','width');
+
+  const cls=up===probed.length?'ok':(up===0?'crit':'warn');
+  setCard('subs',cls,up+'/'+total,up+' reachable'+(total>probed.length?' · '+probed.length+' probed':''),{pct:Math.round((up/probed.length)*100)});
+  badge.className='badge '+cls;badge.textContent=up+'/'+probed.length+' UP';
+  titleEl.textContent=up+' / '+probed.length+' subdomains reachable'+(total>probed.length?' ('+total+' discovered)':'');
+  titleEl.style.color='var(--'+cls+')';
+  noteEl.innerHTML='Auto-enumerated from the Certificate Transparency log for <strong>'+esc(PUBLIC_DOMAIN)+'</strong> and probed live from your browser. '+(total>probed.length?'Showing the first '+probed.length+' of '+total+' (capped for performance). ':'')+'Reachability is opaque cross-origin; cert days come from CT.';
+  addEvent(cls,'Subdomain Sweep Done',up+' of '+probed.length+' probed subdomains reachable ('+total+' discovered)');
+}
+
+/* ============================================================
    Orchestration
    ============================================================ */
 async function runAllChecks(opts){
@@ -427,14 +531,16 @@ async function runAllChecks(opts){
   btn.disabled=true;btn.innerHTML='<span class="ico">&#x21BB;</span>Scanning…';
   if(scanBtn){scanBtn.disabled=true;scanBtn.innerHTML='<span class="ico">&#x25B6;</span>Scanning…';}
 
-  ['ssl','dns','certs','issuer','mx'].forEach(id=>setCard(id,'loading','…','Checking…'));
+  ['ssl','dns','certs','issuer','mx','subs'].forEach(id=>setCard(id,'loading','…','Checking…'));
   setCard('intranet','loading','…','Probing…');
   document.getElementById('event-feed').innerHTML='';
   addEvent('info','Scan Started','Live checks on '+PUBLIC_DOMAIN+' via crt.sh + Google DoH (100% free, no API key)');
 
+  /* crt.sh must finish first — it populates the subdomain list the sweep probes. */
   await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet()]);
+  await checkSubdomains();
 
-  addEvent('ok','Scan Complete','Public APIs + intranet probe done. Connect the agent for live internal events.');
+  addEvent('ok','Scan Complete','Public surface, '+Object.keys(DISCOVERED_SUBS).length+' subdomains, and intranet probe done. Connect the agent for live internal events.');
   btn.disabled=false;btn.innerHTML='<span class="ico">&#x21BB;</span>Refresh';
   if(scanBtn){scanBtn.disabled=false;scanBtn.innerHTML='<span class="ico">&#x25B6;</span>Run Scan';}
   scanning=false;

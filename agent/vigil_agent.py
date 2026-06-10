@@ -67,17 +67,32 @@ DEFAULT_CONFIG = {
     "auth_failure_burst": 3,           # >= this many 401/403 in one cycle -> breach flag
     "server_error_storm": 3,           # >= this many 5xx in one cycle -> breach flag
     "cert_min_days": 14,               # warn when a TLS cert expires within N days
+    # --- automatic discovery (zero manual service list) ---
+    # When enabled, the agent enumerates targets on its own and keeps the
+    # monitored set current, so you never hand-maintain the `services` list.
+    "auto_discover": True,
+    # Domains to enumerate. Empty -> derived from the apex of every host in
+    # `services` (e.g. intranet.kneuralabs.com -> kneuralabs.com), so a single
+    # seed service is enough to bootstrap full-surface discovery.
+    "discover_domains": [],
+    # Query crt.sh certificate-transparency logs to enumerate every subdomain
+    # that has ever been issued a cert under the discover domains.
+    "discover_via_crtsh": True,
+    # Sweep these conventional paths on each discovered host / seed domain.
+    "discover_paths": ["", "/auth", "/api", "/login", "/admin", "/hr", "/dev",
+                       "/files", "/analytics", "/vpn", "/status", "/health"],
+    # Re-run discovery this often so new subdomains/services are picked up live.
+    "discover_interval_seconds": 1800,
+    # Safety cap on how many services discovery may add (prevents runaway sweeps).
+    "max_discovered_services": 200,
     # services: {name, url, [expect_status]}.
-    # expect_status lets you assert a route's expected code; a mismatch is flagged
-    # (e.g. expect_status 401 on a protected API -> a 200 is a possible auth bypass).
+    # OPTIONAL when auto_discover is on — leave empty for fully automatic
+    # monitoring, or seed a few to assert specific routes. expect_status lets
+    # you assert a route's expected code; a mismatch is flagged (e.g.
+    # expect_status 401 on a protected API -> a 200 is a possible auth bypass).
     "services": [
-        {"name": "SSO / Auth Portal", "url": "https://intranet.kneuralabs.com/auth"},
-        {"name": "HR System", "url": "https://intranet.kneuralabs.com/hr"},
-        {"name": "Dev Tools", "url": "https://intranet.kneuralabs.com/dev"},
-        {"name": "File Storage", "url": "https://intranet.kneuralabs.com/files"},
-        {"name": "Analytics", "url": "https://intranet.kneuralabs.com/analytics"},
-        {"name": "VPN Gateway", "url": "https://intranet.kneuralabs.com/vpn"},
-        {"name": "API Gateway", "url": "https://intranet.kneuralabs.com/api"},
+        {"name": "Intranet Root", "url": "https://intranet.kneuralabs.com"},
+        {"name": "API Gateway", "url": "https://intranet.kneuralabs.com/api", "expect_status": 401},
     ],
 }
 
@@ -166,6 +181,7 @@ class Monitor(threading.Thread):
             ServiceState(s.get("name") or s.get("url"), s["url"], s.get("expect_status"))
             for s in config.get("services", [])
         ]
+        self._known_urls = {s.url for s in self.services}
         self._stop = threading.Event()
         self._auth_burst_active = False
         self._error_storm_active = False
@@ -178,6 +194,23 @@ class Monitor(threading.Thread):
 
     def stop(self):
         self._stop.set()
+
+    def add_services(self, items, cap):
+        """Thread-safe: register newly discovered {name,url,expect_status}
+        services, skipping URLs already monitored. Returns names added."""
+        added = []
+        with self._lock:
+            for it in items:
+                url = (it.get("url") or "").strip()
+                if not url or url in self._known_urls:
+                    continue
+                if len(self.services) >= cap:
+                    break
+                name = it.get("name") or url
+                self.services.append(ServiceState(name, url, it.get("expect_status")))
+                self._known_urls.add(url)
+                added.append(name)
+        return added
 
     def status_snapshot(self):
         with self._lock:
@@ -236,7 +269,9 @@ class Monitor(threading.Thread):
         auth_fail = 0
         server_err = 0
 
-        for svc in self.services:
+        with self._lock:
+            services = list(self.services)   # snapshot: discovery may append concurrently
+        for svc in services:
             # Isolate each service's check: one failing service (e.g. an
             # exception in cert checking) must not abort the rest of the cycle.
             try:
@@ -366,6 +401,97 @@ class Monitor(threading.Thread):
             self._stop.wait(interval)
 
 
+def apex_of(host):
+    """Best-effort registrable apex (last two labels). Good enough to seed a
+    crt.sh subdomain sweep: intranet.kneuralabs.com -> kneuralabs.com."""
+    parts = (host or "").split(".")
+    if len(parts) <= 2:
+        return host
+    return ".".join(parts[-2:])
+
+
+class Discovery(threading.Thread):
+    """Background discovery: enumerate subdomains (crt.sh CT logs) and sweep
+    conventional paths, feeding every live target into the monitor so the
+    monitored set stays current with zero manual config."""
+
+    daemon = True
+
+    def __init__(self, config, log, monitor):
+        super().__init__(name="vigil-discovery")
+        self.cfg = config
+        self.log = log
+        self.monitor = monitor
+        self._stop = threading.Event()
+
+    def stop(self):
+        self._stop.set()
+
+    def _seed_domains(self):
+        domains = [d.strip().lower() for d in self.cfg.get("discover_domains", []) if d.strip()]
+        if domains:
+            return sorted(set(domains))
+        # Derive from the apex of every configured/known service host.
+        seeds = set()
+        for svc in list(self.monitor.services):
+            host = urlparse(svc.url).hostname
+            if host:
+                seeds.add(apex_of(host))
+        return sorted(seeds)
+
+    def _crtsh_subdomains(self, domain):
+        """Return unique non-wildcard hostnames seen in CT logs for *.domain."""
+        hosts = set()
+        url = "https://crt.sh/?q=%25." + domain + "&output=json"
+        req = urllib.request.Request(url, headers={"User-Agent": "vigil-agent/1.1"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                rows = json.loads(resp.read().decode("utf-8", "replace"))
+        except Exception:
+            return hosts
+        for row in rows or []:
+            for field in ("common_name", "name_value"):
+                val = row.get(field) or ""
+                for name in str(val).split("\n"):
+                    name = name.strip().lower().rstrip(".")
+                    if not name or "*" in name or " " in name:
+                        continue
+                    if name == domain or name.endswith("." + domain):
+                        hosts.add(name)
+        return hosts
+
+    def _discover_once(self):
+        paths = self.cfg.get("discover_paths", [""]) or [""]
+        cap = self.cfg.get("max_discovered_services", 200)
+        use_crtsh = self.cfg.get("discover_via_crtsh", True)
+        targets = []
+        for domain in self._seed_domains():
+            hosts = {domain}
+            if use_crtsh:
+                hosts |= self._crtsh_subdomains(domain)
+            for host in sorted(hosts):
+                for path in paths:
+                    targets.append({"name": host + (path or "/"),
+                                    "url": "https://" + host + path})
+        added = self.monitor.add_services(targets, cap)
+        if added:
+            self.log.add("info", "Auto-Discovery",
+                         "Discovered %d new target(s) — now monitoring %d service(s)."
+                         % (len(added), len(self.monitor.services)),
+                         kind="status")
+
+    def run(self):
+        if not self.cfg.get("auto_discover", True):
+            return
+        interval = self.cfg.get("discover_interval_seconds", 1800)
+        while not self._stop.is_set():
+            try:
+                self._discover_once()
+            except Exception as e:
+                self.log.add("warn", "Discovery Error", str(e), kind="status")
+            self._stop.wait(interval)
+
+
 class WebhookPusher(threading.Thread):
     """Optional: POST new events to a public relay URL."""
 
@@ -482,6 +608,11 @@ def main():
     monitor = Monitor(cfg, log)
     monitor.start()
 
+    discovery = None
+    if cfg.get("auto_discover", True):
+        discovery = Discovery(cfg, log, monitor)
+        discovery.start()
+
     pusher = None
     if cfg.get("webhook_url"):
         pusher = WebhookPusher(cfg, log)
@@ -494,8 +625,15 @@ def main():
     print("Vigil agent listening on http://{}:{}".format(host, port))
     print("  /events  rolling event log   /status  live per-service codes + flags")
     print("  /config  service list (dashboard probe sync)   /health  liveness")
-    print("Monitoring {} service(s) every {}s".format(
+    print("Monitoring {} seed service(s) every {}s".format(
         len(cfg.get("services", [])), cfg.get("poll_interval_seconds", 30)))
+    if cfg.get("auto_discover", True):
+        print("Auto-discovery: ON (crt.sh={} every {}s, cap {} services)".format(
+            "on" if cfg.get("discover_via_crtsh", True) else "off",
+            cfg.get("discover_interval_seconds", 1800),
+            cfg.get("max_discovered_services", 200)))
+    else:
+        print("Auto-discovery: OFF (static service list)")
     # Startup configuration summary (never prints secret values).
     print("Config: tls_verify={} auth_token={} webhook={} event_buffer={}".format(
         "on" if cfg.get("verify_tls", True) else "OFF (insecure)",
@@ -519,6 +657,8 @@ def main():
         print("\nShutting down...")
     finally:
         monitor.stop()
+        if discovery:
+            discovery.stop()
         if pusher:
             pusher.stop()
         httpd.shutdown()
