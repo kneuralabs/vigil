@@ -39,20 +39,20 @@
         <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
         <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
       </button>
-      <button class="refresh-btn" id="refresh-btn" onclick="runAllChecks()"><span class="ico">&#x21BB;</span>Refresh</button>
+      <button class="refresh-btn" id="refresh-btn" onclick="runAllChecks({force:true})"><span class="ico">&#x21BB;</span>Refresh</button>
     </div>
   </header>
 
   <div class="command-bar">
     <div class="cfg-field">
       <label><span class="lk"></span>Public Surface</label>
-      <input id="public-url" type="text" placeholder="https://www.example.com" value="https://www.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
+      <input id="public-url" type="text" placeholder="https://www.example.com" value="https://www.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks({force:true})">
     </div>
     <div class="cfg-field">
       <label><span class="lk warn"></span>Intranet Target</label>
-      <input id="intranet-url-input" type="text" placeholder="https://intranet.example.com" value="https://intranet.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks()">
+      <input id="intranet-url-input" type="text" placeholder="https://intranet.example.com" value="https://intranet.kneuralabs.com" onkeydown="if(event.key==='Enter')runAllChecks({force:true})">
     </div>
-    <button class="scan-btn" id="scan-btn" onclick="runAllChecks()"><span class="ico">&#x25B6;</span>Run Scan</button>
+    <button class="scan-btn" id="scan-btn" onclick="runAllChecks({force:true})"><span class="ico">&#x25B6;</span>Run Scan</button>
   </div>
 
   <div class="status-bar">

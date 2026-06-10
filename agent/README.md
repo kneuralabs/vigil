@@ -208,6 +208,29 @@ docker build -t vigil-agent .
 docker run -d --name vigil-agent -p 8787:8787 vigil-agent
 ```
 
+## Securing the agent
+
+When you set an `auth_token`, the agent accepts it two ways — prefer the
+**`Authorization: Bearer` header** over the `?token=` query parameter:
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" https://agent.example.com/events
+```
+
+Query-parameter tokens (`/events?token=...`) leak easily: they end up in web
+server / proxy / tunnel access logs, browser history, and can be forwarded to
+third parties via the `Referer` header. Headers are not logged or forwarded
+that way. Treat `?token=` as a convenience fallback only (e.g. when a client
+can't set headers), and rotate the token if a URL containing it may have been
+exposed.
+
+Also, **never commit `config.json`** — it can contain your `auth_token`,
+internal hostnames, and webhook URL. Ignore it before your first commit:
+
+```bash
+echo "config.json" >> .gitignore
+```
+
 ## Security notes
 
 - The agent only issues outbound `GET` requests to the URLs you list. It stores
