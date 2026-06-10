@@ -86,6 +86,12 @@
       <div class="kpi-track"><i id="track-mx"></i></div>
       <div class="stat-sub" id="sub-mx">DNS MX record</div>
     </div>
+    <div class="stat-card loading" id="card-subs">
+      <div class="stat-label">Subdomains Live</div>
+      <div class="stat-val" id="val-subs">…</div>
+      <div class="kpi-track"><i id="track-subs"></i></div>
+      <div class="stat-sub" id="sub-subs">Auto-enumerated</div>
+    </div>
     <div class="stat-card warn" id="card-intranet">
       <div class="stat-label">Intranet</div>
       <div class="stat-val" id="val-intranet" style="font-size:1.15rem">&#x2014;</div>
@@ -158,7 +164,33 @@
   </div>
 
   <div class="section-label" style="margin-top:6px">
-    <span class="idx">02</span> Intranet
+    <span class="idx">02</span> Subdomain Surface
+    <span class="dom" id="subdomain-domain-label">*.kneuralabs.com</span>
+    <span class="real-badge">AUTO-DISCOVERED · CT LOG</span>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel" data-screen-label="subdomain-panel" style="grid-column:1 / -1">
+      <div class="panel-hdr">
+        <div class="panel-title"><span class="dot"></span>Discovered Subdomains <span class="src">crt.sh CT log + live probe</span></div>
+        <span class="badge info" id="subs-badge"><span class="spinner"></span>Enumerating</span>
+      </div>
+      <div class="probe-hero">
+        <div class="radar" id="subs-radar"><b></b></div>
+        <div>
+          <div class="probe-hero-title" id="subs-title" style="color:var(--info)">Enumerating subdomains…</div>
+          <div class="probe-hero-note" id="subs-note">Every hostname ever issued a certificate under this domain is pulled from the public Certificate Transparency log and probed live for reachability — no list to maintain.</div>
+        </div>
+      </div>
+      <div class="sub-head">Live Reachability · per subdomain</div>
+      <div class="alarm-list" id="subdomain-list">
+        <div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No scan run yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:6px">
+    <span class="idx">03</span> Intranet
     <span class="dom" id="intranet-domain-label">intranet.kneuralabs.com</span>
     <span class="sim-badge" id="intranet-section-badge">LIVE PROBE</span>
   </div>
