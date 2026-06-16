@@ -192,6 +192,27 @@ function intranetRow(tag,name,sub,cls,label,latPct){
     '<span class="badge '+cls+'">'+label+'</span></div>';
 }
 
+/* ---------- DNS existence check (Google DoH) ----------
+   CT logs keep every hostname ever issued a cert, including ones whose DNS
+   record was long ago removed. Those hosts no longer exist, so probing them
+   only produces phantom "DOWN" rows. Resolve each candidate first and treat a
+   definitive NXDOMAIN as "does not exist" so it can be dropped from the sweep.
+   Returns 'yes' (resolves), 'no' (NXDOMAIN — gone), or 'unknown' (DoH failed —
+   keep it and let the live probe decide, so we never hide a real host). */
+async function dohResolves(host){
+  try{
+    let d=cacheGet('doh-sub-A',host);
+    if(!d){
+      const r=await fetch('https://dns.google/resolve?name='+encodeURIComponent(host)+'&type=A');
+      d=await r.json();
+      cacheSet('doh-sub-A',host,d);
+    }
+    if(d&&Array.isArray(d.Answer)&&d.Answer.length)return 'yes';
+    if(d&&d.Status===3)return 'no';   /* NXDOMAIN — the name does not exist */
+    return 'unknown';
+  }catch(_){return 'unknown';}
+}
+
 /* ---------- no-cors reachability probe ---------- */
 async function probeOne(url,timeoutMs){
   const start=performance.now();
@@ -465,13 +486,35 @@ async function checkSubdomains(){
     return;
   }
   const total=hosts.length;
-  const probed=hosts.slice(0,MAX_SUBDOMAIN_PROBES);
+  const candidates=hosts.slice(0,MAX_SUBDOMAIN_PROBES);
 
   if(radar)radar.classList.add('live');
+  badge.className='badge info';badge.textContent='RESOLVING…';
+  titleEl.textContent='Resolving '+candidates.length+' of '+total+' subdomains…';titleEl.style.color='var(--info)';
+  list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Resolving '+candidates.length+' subdomains via DNS…</div>';
+  addEvent('info','Subdomain Enumeration',total+' subdomain(s) found in CT log · checking which still resolve…');
+
+  /* Drop stale CT entries that no longer resolve (NXDOMAIN) so they never show
+     up as phantom "DOWN" hosts — they simply don't exist anymore. */
+  const states=await Promise.all(candidates.map(dohResolves));
+  const probed=candidates.filter((h,i)=>states[i]!=='no');
+  const retired=candidates.length-probed.length;
+  if(retired)addEvent('info','Stale Hosts Skipped',retired+' CT hostname'+(retired>1?'s':'')+' no longer resolve (NXDOMAIN) — excluded from the reachability sweep');
+
+  if(!probed.length){
+    if(radar)radar.classList.remove('live');
+    setCard('subs','warn','0/0','None resolve · '+retired+' retired',{pct:20});
+    badge.className='badge warn';badge.textContent='NONE RESOLVE';
+    titleEl.textContent='No live subdomains';titleEl.style.color='var(--warn)';
+    noteEl.innerHTML='All '+total+' hostname'+(total>1?'s':'')+' found in the Certificate Transparency log for <strong>'+esc(PUBLIC_DOMAIN)+'</strong> resolve to NXDOMAIN — they were certificated once but no longer exist in DNS.';
+    list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No live subdomains to probe.</div>';
+    addEvent('warn','Subdomain Sweep Done','0 live subdomains · '+retired+' retired CT host'+(retired>1?'s':'')+' skipped');
+    return;
+  }
+
   badge.className='badge info';badge.textContent='PROBING '+probed.length+'…';
-  titleEl.textContent='Probing '+probed.length+' of '+total+' subdomains…';titleEl.style.color='var(--info)';
+  titleEl.textContent='Probing '+probed.length+' live subdomain'+(probed.length>1?'s':'')+'…';titleEl.style.color='var(--info)';
   list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Sweeping '+probed.length+' subdomains…</div>';
-  addEvent('info','Subdomain Enumeration',total+' subdomain(s) found in CT log · live-probing '+probed.length+'…');
 
   const results=await Promise.all(probed.map(async h=>{
     const r=await probeOne('https://'+h,6000);
@@ -498,13 +541,14 @@ async function checkSubdomains(){
   list.innerHTML=rows;
   animateBars('#subdomain-list .lat i','width');
 
+  const capped=total>candidates.length;
   const cls=up===probed.length?'ok':(up===0?'crit':'warn');
-  setCard('subs',cls,up+'/'+total,up+' reachable'+(total>probed.length?' · '+probed.length+' probed':''),{pct:Math.round((up/probed.length)*100)});
+  setCard('subs',cls,up+'/'+probed.length,up+' reachable'+(retired?' · '+retired+' retired':'')+(capped?' · '+candidates.length+' probed':''),{pct:Math.round((up/probed.length)*100)});
   badge.className='badge '+cls;badge.textContent=up+'/'+probed.length+' UP';
-  titleEl.textContent=up+' / '+probed.length+' subdomains reachable'+(total>probed.length?' ('+total+' discovered)':'');
+  titleEl.textContent=up+' / '+probed.length+' live subdomains reachable'+(total>probed.length?' ('+total+' in CT log)':'');
   titleEl.style.color='var(--'+cls+')';
-  noteEl.innerHTML='Auto-enumerated from the Certificate Transparency log for <strong>'+esc(PUBLIC_DOMAIN)+'</strong> and probed live from your browser. '+(total>probed.length?'Showing the first '+probed.length+' of '+total+' (capped for performance). ':'')+'Reachability is opaque cross-origin; cert days come from CT.';
-  addEvent(cls,'Subdomain Sweep Done',up+' of '+probed.length+' probed subdomains reachable ('+total+' discovered)');
+  noteEl.innerHTML='Auto-enumerated from the Certificate Transparency log for <strong>'+esc(PUBLIC_DOMAIN)+'</strong> and probed live from your browser. '+(retired?'<strong>'+retired+'</strong> stale CT hostname'+(retired>1?'s that no longer resolve were':' that no longer resolves was')+' excluded. ':'')+(capped?'Showing the first '+candidates.length+' of '+total+' (capped for performance). ':'')+'Reachability is opaque cross-origin; cert days come from CT.';
+  addEvent(cls,'Subdomain Sweep Done',up+' of '+probed.length+' live subdomains reachable'+(retired?' · '+retired+' retired host'+(retired>1?'s':'')+' skipped':'')+' ('+total+' in CT log)');
 }
 
 /* ============================================================
