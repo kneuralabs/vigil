@@ -230,50 +230,6 @@
           <div class="panel-title"><span class="dot info"></span>Connect Intranet Agent</div>
           <span class="badge ok">AUTO-CONNECT</span>
         </div>
-        <div class="oneclick">
-          <h4>&#x26A1; Zero-config — connects itself</h4>
-          <p>This dashboard <strong>finds and connects to your agent automatically</strong> — no URL to paste. It reconnects to a known agent on every visit and keeps watching for a local agent in the background. Just start the agent with the one command below; the dashboard does the rest.</p>
-          <div class="cmd-row">
-            <span class="os">Mac / Linux</span>
-            <code class="step-cmd">curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash</code>
-            <button class="copy-btn" onclick="copyText('curl -fsSL https://vigil.kneuralabs.com/agent/run-agent.sh | bash',this)">Copy</button>
-          </div>
-          <div class="cmd-row">
-            <span class="os">Windows</span>
-            <code class="step-cmd">irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex</code>
-            <button class="copy-btn" onclick="copyText('irm https://vigil.kneuralabs.com/agent/run-agent.ps1 | iex',this)">Copy</button>
-          </div>
-          <p style="margin:7px 0 0">Want a permanent URL that survives restarts? Add <code>--permanent --hostname agent.yourdomain.com</code> — see <code>agent/README.md</code>.</p>
-        </div>
-        <details class="manual">
-          <summary>Agent on another host? Set it manually (optional)</summary>
-          <div>
-            <div class="agent-step">
-              <div class="agent-step-num">1</div>
-              <div>
-                <div class="agent-step-t">Run the agent on an intranet host</div>
-                <div class="agent-step-d">Copy the repo's <code>agent/</code> folder to any box that can reach your services. Zero dependencies — just Python 3:</div>
-                <code class="step-cmd">cp config.example.json config.json &amp;&amp; python3 vigil_agent.py --config config.json</code>
-              </div>
-            </div>
-            <div class="agent-step">
-              <div class="agent-step-num">2</div>
-              <div>
-                <div class="agent-step-t">Expose its <code>/events</code> endpoint</div>
-                <div class="agent-step-d">Easiest — a Cloudflare Tunnel (no inbound ports; gives a public HTTPS URL). The agent already sends CORS headers:</div>
-                <code class="step-cmd">cloudflared tunnel --url http://localhost:8787</code>
-                <div class="agent-step-d" style="margin-top:6px">Alternative: set <code>webhook_url</code> in the config to PUSH events to a relay you control, then use that relay's read URL.</div>
-              </div>
-            </div>
-            <div class="agent-step">
-              <div class="agent-step-num">3</div>
-              <div>
-                <div class="agent-step-t">Paste the URL below &amp; Connect <span style="color:var(--muted);font-weight:400">(only needed for a remote tunnel)</span></div>
-                <div class="agent-step-d">A local agent is detected automatically. For a remote tunnel, paste its <code>/events</code> URL once — the dashboard remembers it and reconnects on every future visit. It polls every 10s, validates the JSON, de-duplicates, and streams only new events into the feed.</div>
-              </div>
-            </div>
-          </div>
-        </details>
         <div class="agent-row">
           <input id="webhook-url" placeholder="https://&lt;your-tunnel&gt;.trycloudflare.com/events" onkeydown="if(event.key==='Enter')connectWebhook()">
           <button id="agent-connect-btn" class="agent-btn go" onclick="connectWebhook()">Connect</button>
