@@ -286,6 +286,16 @@ header{
 .panel-title .dot.warn{background:var(--warn)}
 .panel-title .src{font-family:var(--font-mono);font-size:.58rem;color:var(--muted);font-weight:600;letter-spacing:.02em}
 
+/* ---------- Sentinel embed panel ---------- */
+.sentinel-open{font-family:var(--font-mono);font-size:.6rem;font-weight:700;color:var(--info);
+  text-decoration:none;letter-spacing:.04em;white-space:nowrap}
+.sentinel-open:hover{text-decoration:underline}
+.sentinel-embed{position:relative;width:100%;height:520px;border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;background:var(--bg-2)}
+.sentinel-embed iframe{width:100%;height:100%;border:none;display:block}
+.sentinel-note{margin-top:10px;font-size:.62rem;line-height:1.5;color:var(--muted);font-family:var(--font-mono)}
+@media (max-width:640px){.sentinel-embed{height:420px}}
+
 .badge{font-size:.56rem;font-weight:700;padding:3px 9px;border-radius:var(--r-sm);border:1px solid;
   font-family:var(--font-mono);letter-spacing:.05em;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 .badge.ok{color:var(--ok);border-color:var(--ok-line);background:var(--ok-soft)}
