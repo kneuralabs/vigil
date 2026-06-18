@@ -598,7 +598,7 @@ async function checkCodeChecks(force){
   try{
     let repos=force?null:cacheGet('gh-repos',SENTINEL_ORG);
     if(!repos){
-      const r=await fetch('https://api.github.com/orgs/'+SENTINEL_ORG+'/repos?per_page=100&sort=pushed&type=public');
+      const r=await fetch('https://api.github.com/users/'+SENTINEL_ORG+'/repos?per_page=100&sort=pushed');
       if(!r.ok)throw new Error('GitHub HTTP '+r.status);
       repos=await r.json();
       cacheSet('gh-repos',SENTINEL_ORG,repos);
