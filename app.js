@@ -552,6 +552,65 @@ async function checkSubdomains(){
 }
 
 /* ============================================================
+   SENTINEL — repository posture summary (GitHub public API, no key)
+   Mirrors the at-a-glance view from sentinel.kneuralabs.com using only
+   public data; the full security scan stays behind SSO inside Sentinel.
+   ============================================================ */
+const SENTINEL_ORG='kneuralabs';
+function relTime(iso){
+  const s=Math.floor((Date.now()-new Date(iso))/1000);
+  if(isNaN(s))return '';
+  if(s<60)return 'just now';
+  const m=Math.floor(s/60);if(m<60)return m+'m ago';
+  const h=Math.floor(m/60);if(h<24)return h+'h ago';
+  const d=Math.floor(h/24);if(d<30)return d+'d ago';
+  const mo=Math.floor(d/30);if(mo<12)return mo+'mo ago';
+  return Math.floor(mo/12)+'y ago';
+}
+function senStat(num,lbl,danger){
+  return '<div class="sen-stat"><div class="sen-num'+(danger?' danger':'')+'">'+num+'</div><div class="sen-lbl">'+lbl+'</div></div>';
+}
+async function checkSentinelRepos(force){
+  const stats=document.getElementById('sentinel-stats');
+  const listEl=document.getElementById('sentinel-repos');
+  if(!stats||!listEl)return;
+  try{
+    let repos=force?null:cacheGet('gh-repos',SENTINEL_ORG);
+    if(!repos){
+      const r=await fetch('https://api.github.com/orgs/'+SENTINEL_ORG+'/repos?per_page=100&sort=pushed&type=public');
+      if(!r.ok)throw new Error('GitHub HTTP '+r.status);
+      repos=await r.json();
+      cacheSet('gh-repos',SENTINEL_ORG,repos);
+    }
+    if(!Array.isArray(repos)||!repos.length){
+      stats.innerHTML='';
+      listEl.innerHTML='<div class="sen-repo"><span class="sen-repo-nm">No public repositories found.</span></div>';
+      return;
+    }
+    const total=repos.length;
+    const stars=repos.reduce((a,r)=>a+(r.stargazers_count||0),0);
+    const issues=repos.reduce((a,r)=>a+(r.open_issues_count||0),0);
+    const archived=repos.filter(r=>r.archived).length;
+    stats.innerHTML=senStat(total,'Repositories')+senStat(stars,'Stars')+
+      senStat(issues,'Open Issues',issues>0)+senStat(archived,'Archived');
+    listEl.innerHTML=repos.slice(0,8).map(r=>{
+      const iss=r.open_issues_count||0;
+      const lang=r.language?'<span class="sen-lang"><i></i>'+esc(r.language)+'</span>':'';
+      const star=r.stargazers_count?'&#9733; '+r.stargazers_count+' &middot; ':'';
+      const issTxt=iss?'<span class="sen-meta warn">'+iss+' open</span>':'<span class="sen-meta">clear</span>';
+      return '<div class="sen-repo">'+
+        '<span class="sen-repo-nm"><a href="'+esc(r.html_url)+'" target="_blank" rel="noopener">'+esc(r.name)+'</a></span>'+
+        lang+'<span class="sen-meta">'+star+'pushed '+relTime(r.pushed_at)+'</span>'+issTxt+'</div>';
+    }).join('');
+    addEvent('ok','Sentinel Repos',total+' Kneuralabs repos · '+stars+' stars · '+issues+' open issues (GitHub public API)');
+  }catch(e){
+    stats.innerHTML='';
+    listEl.innerHTML='<div class="sen-repo"><span class="sen-repo-nm">Could not reach GitHub — '+esc(e.message)+'</span></div>';
+    addEvent('warn','Sentinel Repos','GitHub API unreachable — '+e.message);
+  }
+}
+
+/* ============================================================
    Orchestration
    ============================================================ */
 async function runAllChecks(opts){
@@ -581,7 +640,7 @@ async function runAllChecks(opts){
   addEvent('info','Scan Started','Live checks on '+PUBLIC_DOMAIN+' via crt.sh + Google DoH (100% free, no API key)');
 
   /* crt.sh must finish first — it populates the subdomain list the sweep probes. */
-  await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet()]);
+  await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet(),checkSentinelRepos(force)]);
   await checkSubdomains();
 
   addEvent('ok','Scan Complete','Public surface, '+Object.keys(DISCOVERED_SUBS).length+' subdomains, and intranet probe done. Connect the agent for live internal events.');

@@ -48,11 +48,12 @@ Each card shows a value, a KPI track, and a sub-label:
 - **Live Scan Event Log** — streaming feed of scan events from public APIs.
 - **Connect Intranet Agent** — connection panel for the optional intranet agent:
   a URL input, Connect / Stop buttons, and a connection-status line.
-- **Sentinel · Security Posture** — a full-width panel embedding the Sentinel
-  remediation hub (`sentinel.kneuralabs.com`) live via iframe, with an
-  "Open Sentinel ↗" link. Surfaces real-time repository security posture
-  (secure / at-risk / error repos and open vulnerabilities by severity) for the
-  signed-in Kneuralabs SSO session.
+- **Sentinel · Repository Posture** — a full-width panel summarising every
+  Kneuralabs repository Sentinel watches, pulled live from the GitHub public API
+  (`api.github.com`, no key). Shows headline stats (repositories, stars, open
+  issues, archived) and a list of the most recently pushed repos with language,
+  stars, last-push time and open-issue count, plus an "Open Sentinel ↗" link to
+  the full SSO-gated security scan.
 
 ## Tweaks panel (edit-mode appearance controls)
 A floating settings panel exposing live theming controls:

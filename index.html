@@ -243,13 +243,14 @@
   <div class="main-grid">
     <div class="panel" data-screen-label="sentinel-summary" style="grid-column:1 / -1">
       <div class="panel-hdr">
-        <div class="panel-title"><span class="dot info"></span>Sentinel &middot; Security Posture <span class="src">sentinel.kneuralabs.com</span></div>
+        <div class="panel-title"><span class="dot info"></span>Sentinel &middot; Repository Posture <span class="src">api.github.com</span></div>
         <a class="sentinel-open" href="https://sentinel.kneuralabs.com" target="_blank" rel="noopener">Open Sentinel &#x2197;</a>
       </div>
-      <div class="sentinel-embed">
-        <iframe src="https://sentinel.kneuralabs.com" title="Sentinel — Automated Remediation Hub" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <div class="sentinel-stats" id="sentinel-stats">
+        <div class="loading-skeleton"></div><div class="loading-skeleton"></div><div class="loading-skeleton"></div>
       </div>
-      <div class="sentinel-note">Live view of the Sentinel remediation hub. Sign in with your Kneuralabs SSO to see real-time repository security posture &mdash; secure / at-risk / error repositories and open vulnerabilities by severity. If the panel stays blank, Sentinel may block embedding; use <strong>Open Sentinel &#x2197;</strong>.</div>
+      <div class="sentinel-repos" id="sentinel-repos"></div>
+      <div class="sentinel-note">Live summary of every Kneuralabs repository Sentinel watches, pulled from the GitHub public API &mdash; no key required. For the full security scan (new commits, branches &amp; Dependabot alerts by severity) open Sentinel and sign in with your Kneuralabs SSO.</div>
     </div>
   </div>
 
