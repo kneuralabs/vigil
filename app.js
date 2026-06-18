@@ -552,11 +552,14 @@ async function checkSubdomains(){
 }
 
 /* ============================================================
-   SENTINEL — repository posture summary (GitHub public API, no key)
-   Mirrors the at-a-glance view from sentinel.kneuralabs.com using only
-   public data; the full security scan stays behind SSO inside Sentinel.
+   CODE CHECK STATUS — live CI / check-run status per repo (GitHub
+   public API, no key). Rendered in the same status-row style as the
+   Intranet Agent panel; the full security scan stays behind SSO in
+   Sentinel.
    ============================================================ */
 const SENTINEL_ORG='kneuralabs';
+const MAX_CODE_REPOS=8;   /* cap per-repo check calls — public API is rate-limited */
+
 function relTime(iso){
   const s=Math.floor((Date.now()-new Date(iso))/1000);
   if(isNaN(s))return '';
@@ -567,13 +570,31 @@ function relTime(iso){
   const mo=Math.floor(d/30);if(mo<12)return mo+'mo ago';
   return Math.floor(mo/12)+'y ago';
 }
-function senStat(num,lbl,danger){
-  return '<div class="sen-stat"><div class="sen-num'+(danger?' danger':'')+'">'+num+'</div><div class="sen-lbl">'+lbl+'</div></div>';
+function repoTag(name){return (String(name).replace(/[^A-Za-z0-9]/g,'').slice(0,4)||'REPO').toUpperCase();}
+
+/* Roll a repo's check-runs up into one verdict. failure/cancelled/etc → crit;
+   any still running → info; all good → ok; no checks configured → neutral. */
+function checkVerdict(runs){
+  let fail=0,pend=0,pass=0;
+  runs.forEach(c=>{
+    if(c.status!=='completed'){pend++;return;}
+    const con=c.conclusion;
+    if(con==='success'||con==='neutral'||con==='skipped')pass++;else fail++;
+  });
+  return {fail,pend,pass,total:runs.length};
 }
-async function checkSentinelRepos(force){
-  const stats=document.getElementById('sentinel-stats');
-  const listEl=document.getElementById('sentinel-repos');
-  if(!stats||!listEl)return;
+
+async function checkCodeChecks(force){
+  const badge=document.getElementById('code-badge');
+  const titleEl=document.getElementById('code-title');
+  const noteEl=document.getElementById('code-note');
+  const radar=document.getElementById('code-radar');
+  const listEl=document.getElementById('code-checks');
+  if(!listEl)return;
+  if(radar)radar.classList.add('live');
+  badge.className='badge info';badge.textContent='SCANNING…';
+  titleEl.textContent='Fetching Kneuralabs repositories…';titleEl.style.color='var(--info)';
+  listEl.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Querying GitHub for repository check status…</div>';
   try{
     let repos=force?null:cacheGet('gh-repos',SENTINEL_ORG);
     if(!repos){
@@ -583,30 +604,58 @@ async function checkSentinelRepos(force){
       cacheSet('gh-repos',SENTINEL_ORG,repos);
     }
     if(!Array.isArray(repos)||!repos.length){
-      stats.innerHTML='';
-      listEl.innerHTML='<div class="sen-repo"><span class="sen-repo-nm">No public repositories found.</span></div>';
+      if(radar)radar.classList.remove('live');
+      badge.className='badge warn';badge.textContent='NO REPOS';
+      titleEl.textContent='No public repositories found';titleEl.style.color='var(--warn)';
+      listEl.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No public repositories found for '+esc(SENTINEL_ORG)+'.</div>';
       return;
     }
-    const total=repos.length;
-    const stars=repos.reduce((a,r)=>a+(r.stargazers_count||0),0);
-    const issues=repos.reduce((a,r)=>a+(r.open_issues_count||0),0);
-    const archived=repos.filter(r=>r.archived).length;
-    stats.innerHTML=senStat(total,'Repositories')+senStat(stars,'Stars')+
-      senStat(issues,'Open Issues',issues>0)+senStat(archived,'Archived');
-    listEl.innerHTML=repos.slice(0,8).map(r=>{
-      const iss=r.open_issues_count||0;
-      const lang=r.language?'<span class="sen-lang"><i></i>'+esc(r.language)+'</span>':'';
-      const star=r.stargazers_count?'&#9733; '+r.stargazers_count+' &middot; ':'';
-      const issTxt=iss?'<span class="sen-meta warn">'+iss+' open</span>':'<span class="sen-meta">clear</span>';
-      return '<div class="sen-repo">'+
-        '<span class="sen-repo-nm"><a href="'+esc(r.html_url)+'" target="_blank" rel="noopener">'+esc(r.name)+'</a></span>'+
-        lang+'<span class="sen-meta">'+star+'pushed '+relTime(r.pushed_at)+'</span>'+issTxt+'</div>';
-    }).join('');
-    addEvent('ok','Sentinel Repos',total+' Kneuralabs repos · '+stars+' stars · '+issues+' open issues (GitHub public API)');
+    const top=repos.slice(0,MAX_CODE_REPOS);
+
+    /* Fetch the check-runs for each repo's default branch HEAD in parallel. */
+    const results=await Promise.all(top.map(async repo=>{
+      const ref=repo.default_branch||'HEAD';
+      try{
+        let cr=force?null:cacheGet('gh-checks',repo.full_name);
+        if(!cr){
+          const r=await fetch('https://api.github.com/repos/'+repo.full_name+'/commits/'+encodeURIComponent(ref)+'/check-runs',{headers:{'Accept':'application/vnd.github+json'}});
+          if(!r.ok)throw new Error('HTTP '+r.status);
+          cr=await r.json();
+          cacheSet('gh-checks',repo.full_name,cr);
+        }
+        return {repo,runs:Array.isArray(cr.check_runs)?cr.check_runs:[],err:null};
+      }catch(e){return {repo,runs:null,err:e.message};}
+    }));
+
+    let pass=0,fail=0,pend=0,none=0,bad=0;
+    const rows=results.map(({repo,runs,err})=>{
+      const tag=repoTag(repo.name);
+      const base=(repo.language?esc(repo.language)+' &middot; ':'')+'pushed '+relTime(repo.pushed_at);
+      if(err){bad++;return intranetRow(tag,repo.name,base+' &middot; checks unavailable','warn','NO DATA',null);}
+      if(!runs.length){none++;return intranetRow(tag,repo.name,base+' &middot; no CI configured','info','NO CHECKS',null);}
+      const v=checkVerdict(runs);
+      if(v.fail){fail++;return intranetRow(tag,repo.name,base+' &middot; '+v.fail+'/'+v.total+' failing','crit','FAILING',null);}
+      if(v.pend){pend++;return intranetRow(tag,repo.name,base+' &middot; '+v.pend+' running','info','RUNNING',null);}
+      pass++;return intranetRow(tag,repo.name,base+' &middot; '+v.pass+' check'+(v.pass!==1?'s':'')+' passing','ok','PASSING',null);
+    });
+    listEl.innerHTML=rows.join('');
+    if(radar)radar.classList.remove('live');
+
+    const checked=top.length;
+    const cls=fail?'crit':(pend?'info':(pass?'ok':'warn'));
+    badge.className='badge '+cls;
+    badge.textContent=fail?fail+' FAILING':(pend?pend+' RUNNING':(pass?pass+'/'+checked+' PASSING':'NO CHECKS'));
+    titleEl.textContent=pass+' / '+checked+' repositories passing'+(fail?' · '+fail+' failing':'')+(pend?' · '+pend+' running':'');
+    titleEl.style.color='var(--'+cls+')';
+    noteEl.innerHTML='Live CI / code-check status for the '+checked+' most recently updated Kneuralabs repositories Sentinel watches, from the GitHub public API. Open <a class="sentinel-open" href="https://sentinel.kneuralabs.com" target="_blank" rel="noopener">Sentinel &#x2197;</a> for the full SSO security scan (new commits, branches &amp; Dependabot alerts by severity).';
+    addEvent(cls,'Code Checks',pass+'/'+checked+' repos passing'+(fail?', '+fail+' failing':'')+(pend?', '+pend+' running':'')+(none?', '+none+' without CI':'')+' (GitHub public API)');
   }catch(e){
-    stats.innerHTML='';
-    listEl.innerHTML='<div class="sen-repo"><span class="sen-repo-nm">Could not reach GitHub — '+esc(e.message)+'</span></div>';
-    addEvent('warn','Sentinel Repos','GitHub API unreachable — '+e.message);
+    if(radar)radar.classList.remove('live');
+    badge.className='badge crit';badge.textContent='UNREACHABLE';
+    titleEl.textContent='GitHub API unreachable';titleEl.style.color='var(--crit)';
+    noteEl.innerHTML='Could not reach the GitHub public API. It may be rate-limited (unauthenticated) — retry shortly, or open <a class="sentinel-open" href="https://sentinel.kneuralabs.com" target="_blank" rel="noopener">Sentinel &#x2197;</a> for the full scan.';
+    listEl.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">Could not reach GitHub — '+esc(e.message)+'</div>';
+    addEvent('warn','Code Checks','GitHub API unreachable — '+e.message);
   }
 }
 
@@ -640,7 +689,7 @@ async function runAllChecks(opts){
   addEvent('info','Scan Started','Live checks on '+PUBLIC_DOMAIN+' via crt.sh + Google DoH (100% free, no API key)');
 
   /* crt.sh must finish first — it populates the subdomain list the sweep probes. */
-  await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet(),checkSentinelRepos(force)]);
+  await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet(),checkCodeChecks(force)]);
   await checkSubdomains();
 
   addEvent('ok','Scan Complete','Public surface, '+Object.keys(DISCOVERED_SUBS).length+' subdomains, and intranet probe done. Connect the agent for live internal events.');

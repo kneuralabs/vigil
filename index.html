@@ -241,16 +241,22 @@
   </div>
 
   <div class="main-grid">
-    <div class="panel" data-screen-label="sentinel-summary" style="grid-column:1 / -1">
+    <div class="panel" data-screen-label="code-checks" style="grid-column:1 / -1">
       <div class="panel-hdr">
-        <div class="panel-title"><span class="dot info"></span>Sentinel &middot; Repository Posture <span class="src">api.github.com</span></div>
-        <a class="sentinel-open" href="https://sentinel.kneuralabs.com" target="_blank" rel="noopener">Open Sentinel &#x2197;</a>
+        <div class="panel-title"><span class="dot info"></span>Code Check Status <span class="src">api.github.com</span></div>
+        <span class="badge info" id="code-badge">AWAITING SCAN</span>
       </div>
-      <div class="sentinel-stats" id="sentinel-stats">
-        <div class="loading-skeleton"></div><div class="loading-skeleton"></div><div class="loading-skeleton"></div>
+      <div class="probe-hero">
+        <div class="radar" id="code-radar"><b></b></div>
+        <div>
+          <div class="probe-hero-title" id="code-title" style="color:var(--info)">Awaiting scan</div>
+          <div class="probe-hero-note" id="code-note">Live CI / code-check status for every Kneuralabs repository Sentinel watches, pulled from the GitHub public API &mdash; no key required. Open <a class="sentinel-open" href="https://sentinel.kneuralabs.com" target="_blank" rel="noopener">Sentinel &#x2197;</a> for the full SSO security scan (new commits, branches &amp; Dependabot alerts by severity).</div>
+        </div>
       </div>
-      <div class="sentinel-repos" id="sentinel-repos"></div>
-      <div class="sentinel-note">Live summary of every Kneuralabs repository Sentinel watches, pulled from the GitHub public API &mdash; no key required. For the full security scan (new commits, branches &amp; Dependabot alerts by severity) open Sentinel and sign in with your Kneuralabs SSO.</div>
+      <div class="sub-head">Repository Checks</div>
+      <div class="alarm-list" id="code-checks">
+        <div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No scan run yet.</div>
+      </div>
     </div>
   </div>
 
