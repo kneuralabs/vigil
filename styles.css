@@ -286,29 +286,10 @@ header{
 .panel-title .dot.warn{background:var(--warn)}
 .panel-title .src{font-family:var(--font-mono);font-size:.58rem;color:var(--muted);font-weight:600;letter-spacing:.02em}
 
-/* ---------- Sentinel repository-posture summary ---------- */
-.sentinel-open{font-family:var(--font-mono);font-size:.6rem;font-weight:700;color:var(--info);
-  text-decoration:none;letter-spacing:.04em;white-space:nowrap}
+/* ---------- Code Check Status panel ---------- */
+.sentinel-open{font-family:var(--font-mono);font-weight:700;color:var(--info);
+  text-decoration:none;letter-spacing:.02em;white-space:nowrap}
 .sentinel-open:hover{text-decoration:underline}
-.sentinel-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
-.sen-stat{background:var(--card-2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
-.sen-num{font-size:1.55rem;font-weight:800;line-height:1;color:var(--text)}
-.sen-num.danger{color:var(--crit)}
-.sen-lbl{margin-top:6px;font-family:var(--font-mono);font-size:.56rem;font-weight:600;
-  letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-.sentinel-repos{display:flex;flex-direction:column;gap:1px;background:var(--border);
-  border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-.sen-repo{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--card)}
-.sen-repo-nm{font-family:var(--font-mono);font-size:.7rem;font-weight:600;color:var(--text);flex:1;min-width:0;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sen-repo-nm a{color:inherit;text-decoration:none}
-.sen-repo-nm a:hover{color:var(--info)}
-.sen-lang{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:.58rem;color:var(--muted)}
-.sen-lang i{width:8px;height:8px;border-radius:50%;background:var(--kn-sky);display:inline-block}
-.sen-meta{font-family:var(--font-mono);font-size:.58rem;color:var(--muted);white-space:nowrap}
-.sen-meta.warn{color:var(--warn)}
-.sentinel-note{margin-top:12px;font-size:.62rem;line-height:1.5;color:var(--muted);font-family:var(--font-mono)}
-@media (max-width:640px){.sentinel-stats{grid-template-columns:repeat(2,1fr)}.sen-lang{display:none}}
 
 .badge{font-size:.56rem;font-weight:700;padding:3px 9px;border-radius:var(--r-sm);border:1px solid;
   font-family:var(--font-mono);letter-spacing:.05em;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
