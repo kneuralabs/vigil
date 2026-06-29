@@ -10,6 +10,15 @@
   "use strict";
   var root = document.documentElement;
 
+  /* Terminal lines are written via innerHTML, and mirrored event text is read
+     back out of the feed as decoded textContent — so escape every dynamic
+     string before it is re-injected, or the feed becomes an XSS sink. */
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
   /* ---------- 0. THEME TOGGLE ---------- */
   var THEME_KEY = "vigil-theme";
   function applyTheme(mode) {
@@ -76,7 +85,7 @@
       else if (type === "warn") prefix = "\u25B8 WARN   ";
       line.innerHTML =
         '<span class="t">[' + clock() + "]</span>" +
-        '<span class="m">' + prefix + msg + "</span>";
+        '<span class="m">' + prefix + esc(msg) + "</span>";
       this.body.insertBefore(line, this.prompt);
       this.lines++;
       // cap history

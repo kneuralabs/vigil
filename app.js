@@ -12,6 +12,11 @@ setInterval(tick,1000);tick();
 
 function ts(){return new Date().toTimeString().slice(0,8);}
 
+/* ---------- shared constants ---------- */
+const MS_PER_DAY=864e5;          /* milliseconds in a day */
+const PROBE_TIMEOUT_MS=6000;     /* per-endpoint reachability probe budget */
+const SLOW_MS=1500;              /* round-trip above this is flagged "SLOW" */
+
 let PUBLIC_DOMAIN='kneuralabs.com';
 
 /* Subdomains auto-enumerated from crt.sh CT data on each scan.
@@ -42,7 +47,7 @@ function buildSubdomains(certs){
   const now=Date.now();
   Object.keys(map).forEach(h=>{
     const e=map[h].expiry;
-    map[h].daysLeft=e?Math.floor((e-now)/864e5):null;
+    map[h].daysLeft=e?Math.floor((e-now)/MS_PER_DAY):null;
   });
   return map;
 }
@@ -59,11 +64,12 @@ function esc(s){
   });
 }
 
-function copyText(text,btn){
-  const done=function(){if(btn){const o=btn.textContent;btn.textContent='Copied';setTimeout(function(){btn.textContent=o;},1200);}};
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,done);}
-  else{const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(_){}t.remove();done();}
-}
+/* Single source of truth for the muted placeholder/empty-state rows used by
+   every panel. `html` is treated as trusted markup — callers that interpolate
+   external data must wrap it in esc() themselves. */
+const NOTE_STYLE='color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)';
+function mutedNote(html){return '<div style="'+NOTE_STYLE+'">'+html+'</div>';}
+function loadingNote(html){return mutedNote('<span class="spinner"></span> '+html);}
 
 /* ---------- intranet services (clean mono tags, no emoji) ---------- */
 const INTRANET_SERVICES=[
@@ -174,12 +180,16 @@ function setCard(id,cls,val,sub,opts){
 }
 
 /* ---------- event feed (streaming) ---------- */
+/* title/msg are always escaped here, so callers pass plain text — never
+   pre-escaped markup. This is the single trust boundary for the event feed:
+   crt.sh issuer names, resolved domains and agent-supplied payloads all flow
+   through it, so escaping once at the sink closes the whole XSS class. */
 function addEvent(type,title,msg){
   const feed=document.getElementById('event-feed');
   if(feed.querySelector('div[style]'))feed.innerHTML='';
   const div=document.createElement('div');
   div.className='event '+type;
-  div.innerHTML='<span class="event-time">'+ts()+'</span><div class="event-body"><strong>'+title+'</strong><p>'+msg+'</p></div>';
+  div.innerHTML='<span class="event-time">'+ts()+'</span><div class="event-body"><strong>'+esc(title)+'</strong><p>'+esc(msg)+'</p></div>';
   feed.insertBefore(div,feed.firstChild);
   if(feed.children.length>30)feed.removeChild(feed.lastChild);
 }
@@ -217,7 +227,7 @@ async function dohResolves(host){
 async function probeOne(url,timeoutMs){
   const start=performance.now();
   const ctrl=new AbortController();
-  const t=setTimeout(()=>ctrl.abort(),timeoutMs||6000);
+  const t=setTimeout(()=>ctrl.abort(),timeoutMs||PROBE_TIMEOUT_MS);
   try{
     await fetch(url,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
     clearTimeout(t);
@@ -235,9 +245,9 @@ async function checkSSLandCT(force){
   try{
     let data=force?null:cacheGet('crtsh',PUBLIC_DOMAIN);
     if(data){
-      addEvent('info','SSL &amp; CT Scan','Using cached crt.sh data for '+PUBLIC_DOMAIN+' (≤5 min old)');
+      addEvent('info','SSL & CT Scan','Using cached crt.sh data for '+PUBLIC_DOMAIN+' (≤5 min old)');
     }else{
-      addEvent('info','SSL &amp; CT Scan','Querying crt.sh for '+PUBLIC_DOMAIN+'…');
+      addEvent('info','SSL & CT Scan','Querying crt.sh for '+PUBLIC_DOMAIN+'…');
       const r=await fetch('https://crt.sh/?q='+encodeURIComponent(PUBLIC_DOMAIN)+'&output=json');
       if(!r.ok)throw new Error('crt.sh HTTP '+r.status);
       data=await r.json();
@@ -251,8 +261,8 @@ async function checkSSLandCT(force){
     const notBefore=new Date(latest.not_before);
     const expiry=new Date(latest.not_after);
     const now=new Date();
-    const daysLeft=Math.floor((expiry-now)/864e5);
-    const totalDays=Math.max(1,Math.round((expiry-notBefore)/864e5));
+    const daysLeft=Math.floor((expiry-now)/MS_PER_DAY);
+    const totalDays=Math.max(1,Math.round((expiry-notBefore)/MS_PER_DAY));
     const elapsedPct=Math.max(0,Math.min(100,Math.round(((now-notBefore)/(expiry-notBefore))*100)));
     const issuerMatch=(latest.issuer_name||'').match(/O=([^,]+)/);
     const issuer=issuerMatch?issuerMatch[1].trim():(latest.issuer_name||'Unknown').slice(0,24);
@@ -405,7 +415,7 @@ async function checkIntranet(){
     if(box&&raw)box.value=raw;
   }
   if(!raw){
-    probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No intranet URL entered.</div>';
+    probe.innerHTML=mutedNote('No intranet URL entered.');
     setCard('intranet','warn','&#x2014;','No URL');
     if(!agentConnected){badge.className='badge warn';badge.textContent='NO URL';}
     return;
@@ -419,13 +429,13 @@ async function checkIntranet(){
   titleEl.textContent='Probing '+intranetServices.length+' services…';titleEl.style.color='var(--info)';
   if(radar)radar.classList.add('live');
   noteEl.innerHTML='Running live reachability probes against <strong>'+esc(host)+'</strong> endpoints from your browser…';
-  probe.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Sweeping '+intranetServices.length+' endpoints…</div>';
+  probe.innerHTML=loadingNote('Sweeping '+intranetServices.length+' endpoints…');
   if(!agentConnected){badge.className='badge info';badge.textContent='SCANNING…';}
   addEvent('info','Intranet Sweep','Probing '+intranetServices.length+' '+host+' endpoints from your browser…');
 
   const results=await Promise.all(intranetServices.map(async svc=>{
     const url=svc.url?svc.url:base+svc.path;
-    const r=await probeOne(url,6000);
+    const r=await probeOne(url,PROBE_TIMEOUT_MS);
     return Object.assign({url:url},svc,r);
   }));
 
@@ -436,7 +446,7 @@ async function checkIntranet(){
     const latPct=Math.max(6,Math.min(100,Math.round((r.ms/maxMs)*100)));
     if(r.ok){
       up++;
-      const slow=r.ms>1500;
+      const slow=r.ms>SLOW_MS;
       return intranetRow(r.tag,r.name,path+' &middot; '+r.ms+' ms',slow?'warn':'ok',slow?'SLOW':'REACHABLE',latPct);
     }
     return intranetRow(r.tag,r.name,path+' &middot; '+(r.why==='timeout'?'timed out (6s)':'no response')+' &middot; '+r.ms+' ms','crit',r.why==='timeout'?'TIMEOUT':'DOWN',latPct);
@@ -482,7 +492,7 @@ async function checkSubdomains(){
     badge.className='badge warn';badge.textContent='NONE FOUND';
     titleEl.textContent='No subdomains in CT log';titleEl.style.color='var(--warn)';
     noteEl.textContent='crt.sh returned no certificates for this domain, so there is nothing to enumerate.';
-    list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No subdomains discovered.</div>';
+    list.innerHTML=mutedNote('No subdomains discovered.');
     return;
   }
   const total=hosts.length;
@@ -491,7 +501,7 @@ async function checkSubdomains(){
   if(radar)radar.classList.add('live');
   badge.className='badge info';badge.textContent='RESOLVING…';
   titleEl.textContent='Resolving '+candidates.length+' of '+total+' subdomains…';titleEl.style.color='var(--info)';
-  list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Resolving '+candidates.length+' subdomains via DNS…</div>';
+  list.innerHTML=loadingNote('Resolving '+candidates.length+' subdomains via DNS…');
   addEvent('info','Subdomain Enumeration',total+' subdomain(s) found in CT log · checking which still resolve…');
 
   /* Drop stale CT entries that no longer resolve (NXDOMAIN) so they never show
@@ -507,17 +517,17 @@ async function checkSubdomains(){
     badge.className='badge warn';badge.textContent='NONE RESOLVE';
     titleEl.textContent='No live subdomains';titleEl.style.color='var(--warn)';
     noteEl.innerHTML='All '+total+' hostname'+(total>1?'s':'')+' found in the Certificate Transparency log for <strong>'+esc(PUBLIC_DOMAIN)+'</strong> resolve to NXDOMAIN — they were certificated once but no longer exist in DNS.';
-    list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No live subdomains to probe.</div>';
+    list.innerHTML=mutedNote('No live subdomains to probe.');
     addEvent('warn','Subdomain Sweep Done','0 live subdomains · '+retired+' retired CT host'+(retired>1?'s':'')+' skipped');
     return;
   }
 
   badge.className='badge info';badge.textContent='PROBING '+probed.length+'…';
   titleEl.textContent='Probing '+probed.length+' live subdomain'+(probed.length>1?'s':'')+'…';titleEl.style.color='var(--info)';
-  list.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Sweeping '+probed.length+' subdomains…</div>';
+  list.innerHTML=loadingNote('Sweeping '+probed.length+' subdomains…');
 
   const results=await Promise.all(probed.map(async h=>{
-    const r=await probeOne('https://'+h,6000);
+    const r=await probeOne('https://'+h,PROBE_TIMEOUT_MS);
     return Object.assign({host:h},DISCOVERED_SUBS[h],r);
   }));
 
@@ -533,7 +543,7 @@ async function checkSubdomains(){
     }
     if(r.ok){
       up++;
-      const slow=r.ms>1500;
+      const slow=r.ms>SLOW_MS;
       return intranetRow(tag,r.host,r.ms+' ms'+cert,slow?'warn':'ok',slow?'SLOW':'REACHABLE',latPct);
     }
     return intranetRow(tag,r.host,(r.why==='timeout'?'timed out (6s)':'no response')+cert,'crit',r.why==='timeout'?'TIMEOUT':'DOWN',latPct);
@@ -594,7 +604,7 @@ async function checkCodeChecks(force){
   if(radar)radar.classList.add('live');
   badge.className='badge info';badge.textContent='SCANNING…';
   titleEl.textContent='Fetching Kneuralabs repositories…';titleEl.style.color='var(--info)';
-  listEl.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)"><span class="spinner"></span> Querying GitHub for repository check status…</div>';
+  listEl.innerHTML=loadingNote('Querying GitHub for repository check status…');
   try{
     let repos=force?null:cacheGet('gh-repos',SENTINEL_ORG);
     if(!repos){
@@ -607,7 +617,7 @@ async function checkCodeChecks(force){
       if(radar)radar.classList.remove('live');
       badge.className='badge warn';badge.textContent='NO REPOS';
       titleEl.textContent='No public repositories found';titleEl.style.color='var(--warn)';
-      listEl.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">No public repositories found for '+esc(SENTINEL_ORG)+'.</div>';
+      listEl.innerHTML=mutedNote('No public repositories found for '+esc(SENTINEL_ORG)+'.');
       return;
     }
     const top=repos.slice(0,MAX_CODE_REPOS);
@@ -654,7 +664,7 @@ async function checkCodeChecks(force){
     badge.className='badge crit';badge.textContent='UNREACHABLE';
     titleEl.textContent='GitHub API unreachable';titleEl.style.color='var(--crit)';
     noteEl.innerHTML='Could not reach the GitHub public API. It may be rate-limited (unauthenticated) — retry shortly, or open <a class="sentinel-open" href="https://sentinel.kneuralabs.com" target="_blank" rel="noopener">Sentinel &#x2197;</a> for the full scan.';
-    listEl.innerHTML='<div style="color:var(--muted);font-size:.68rem;padding:8px 10px;font-family:var(--font-mono)">Could not reach GitHub — '+esc(e.message)+'</div>';
+    listEl.innerHTML=mutedNote('Could not reach GitHub — '+esc(e.message));
     addEvent('warn','Code Checks','GitHub API unreachable — '+e.message);
   }
 }
@@ -843,7 +853,7 @@ function connectWebhook(url){
   document.getElementById('agent-disconnect-btn').style.display='';
   setAgentBadge('info','CONNECTING…');
   setConnStatus('Connecting to '+esc(url)+' …');
-  addEvent('info','Agent Connecting','Polling '+esc(url)+' every 10s for intranet events…');
+  addEvent('info','Agent Connecting','Polling '+url+' every 10s for intranet events…');
   if(webhookInterval)clearInterval(webhookInterval);
   seenEventKeys=new Set();
   const statusUrl=/\/events(\?|$)/.test(url)?url.replace(/\/events(\?|$)/,'/status$1'):null;
@@ -871,7 +881,7 @@ function connectWebhook(url){
       agentConnected=false;
       setAgentBadge('crit','UNREACHABLE');
       setConnStatus('Cannot reach endpoint (network or CORS). Check the agent is running and the URL is publicly reachable.','var(--crit)');
-      addEvent('crit','Agent Unreachable','Could not reach '+esc(url)+' — verify the tunnel/agent and that CORS is allowed.');
+      addEvent('crit','Agent Unreachable','Could not reach '+url+' — verify the tunnel/agent and that CORS is allowed.');
       pollFailed();
       return;
     }
@@ -879,7 +889,7 @@ function connectWebhook(url){
       agentConnected=false;
       setAgentBadge('crit','HTTP '+r.status);
       setConnStatus('Endpoint returned HTTP '+r.status+'.','var(--crit)');
-      addEvent('crit','Agent HTTP Error',esc(url)+' returned HTTP '+r.status);
+      addEvent('crit','Agent HTTP Error',url+' returned HTTP '+r.status);
       pollFailed();
       return;
     }
@@ -889,7 +899,7 @@ function connectWebhook(url){
       agentConnected=false;
       setAgentBadge('crit','BAD JSON');
       setConnStatus('Response was not valid JSON. Expected an array of {type,title,message}.','var(--crit)');
-      addEvent('crit','Agent Bad Response',esc(url)+' did not return JSON.');
+      addEvent('crit','Agent Bad Response',url+' did not return JSON.');
       pollFailed();
       return;
     }
@@ -902,7 +912,7 @@ function connectWebhook(url){
       if(seenEventKeys.has(key))return;
       seenEventKeys.add(key);
       const ty=['ok','info','warn','crit'].indexOf(e.type)>=0?e.type:'info';
-      addEvent(ty,esc(e.title||'Intranet Event'),esc(e.message||JSON.stringify(e)));
+      addEvent(ty,e.title||'Intranet Event',e.message||JSON.stringify(e));
       added++;
     });
     agentConnected=true;
