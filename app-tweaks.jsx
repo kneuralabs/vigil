@@ -7,6 +7,22 @@ const VIGIL_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "motion": true
 }/*EDITMODE-END*/;
 
+// Theme persistence is shared with the header toggle in enhance.js:
+// localStorage[vigil-theme] is the single runtime source of truth, while the
+// EDITMODE `theme` above is only the shipped default when nothing is stored.
+const VIGIL_THEME_KEY = "vigil-theme";
+function readStoredTheme() {
+  try {
+    const v = localStorage.getItem(VIGIL_THEME_KEY);
+    return v === "dark" || v === "light" ? v : null;
+  } catch (e) { return null; }
+}
+// Initial tweak values with the stored theme override applied (computed once).
+const VIGIL_INITIAL_TWEAKS = {
+  ...VIGIL_TWEAK_DEFAULTS,
+  theme: readStoredTheme() || VIGIL_TWEAK_DEFAULTS.theme,
+};
+
 const VIGIL_ACCENTS = [
   { name: "royal", label: "Royal Authority Blue", c: "#1C5CAA" },
   { name: "navy",  label: "Deep Navy",           c: "#0D2E5A" },
@@ -25,8 +41,27 @@ function applyVigilTweaks(t) {
 }
 
 function VigilTweaks() {
-  const [t, setTweak] = useTweaks(VIGIL_TWEAK_DEFAULTS);
-  React.useEffect(() => { applyVigilTweaks(t); }, [t.theme, t.accent, t.density, t.motion]);
+  const [t, setTweak] = useTweaks(VIGIL_INITIAL_TWEAKS);
+  // Apply tweaks to :root and persist the theme so it survives reloads and
+  // stays consistent with whatever the header toggle last wrote.
+  React.useEffect(() => {
+    applyVigilTweaks(t);
+    try { localStorage.setItem(VIGIL_THEME_KEY, t.theme); } catch (e) {}
+  }, [t.theme, t.accent, t.density, t.motion]);
+
+  // Mirror header-toggle changes (enhance.js dispatches `vigil:theme`) into the
+  // Mode radio so the two controls never disagree. The ref guards against
+  // re-firing setTweak for a value we already hold.
+  const themeRef = React.useRef(t.theme);
+  themeRef.current = t.theme;
+  React.useEffect(() => {
+    const onExternalTheme = (e) => {
+      const m = e && e.detail;
+      if ((m === "dark" || m === "light") && m !== themeRef.current) setTweak("theme", m);
+    };
+    window.addEventListener("vigil:theme", onExternalTheme);
+    return () => window.removeEventListener("vigil:theme", onExternalTheme);
+  }, [setTweak]);
 
   return (
     <TweaksPanel>
@@ -71,9 +106,9 @@ function VigilTweaks() {
 }
 
 (function () {
-  // VIGIL_TWEAK_DEFAULTS is the persisted source of truth (host rewrites the
-  // EDITMODE block on save), so apply it directly on load — no localStorage.
-  applyVigilTweaks(VIGIL_TWEAK_DEFAULTS);
+  // Apply the stored-theme-aware initial values directly on load (before React
+  // mounts) so there's no light→dark flash and no need to re-assert later.
+  applyVigilTweaks(VIGIL_INITIAL_TWEAKS);
   const mount = document.getElementById("tweaks-root");
   ReactDOM.createRoot(mount).render(<VigilTweaks />);
 })();
