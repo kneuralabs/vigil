@@ -38,12 +38,11 @@
       var next = root.dataset.theme === "dark" ? "light" : "dark";
       applyTheme(next);
       try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+      // Single source of truth: localStorage[vigil-theme]. Broadcast so the
+      // Tweaks panel's Mode radio reflects a header-toggle in lockstep.
+      window.dispatchEvent(new CustomEvent("vigil:theme", { detail: next }));
       term.push("info", "theme switched \u2192 " + next + " mode");
     });
-  }
-  // re-assert stored theme once Tweaks has mounted (it may set its default late)
-  if (stored === "dark" || stored === "light") {
-    setTimeout(function () { applyTheme(stored); }, 1300);
   }
 
   /* ---------- 1. TERMINAL ---------- */

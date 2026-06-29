@@ -86,10 +86,15 @@ const INTRANET_SERVICES=[
    agent's /config service list once an agent connects, so the agent's
    config.json is the single source of truth when one is available. */
 let intranetServices=INTRANET_SERVICES;
+/* Derive a short uppercase tag from an arbitrary label: strip to letters
+   (or letters+digits when `alnum`), take the first 4, upper-case, else the
+   fallback. Shared by the service and repo tag helpers below. */
+function shortTag(label,fallback,alnum){
+  return String(label==null?'':label).replace(alnum?/[^A-Za-z0-9]/g:/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||fallback;
+}
 function makeTag(name){
   const m=INTRANET_SERVICES.find(s=>s.name===name);
-  if(m)return m.tag;
-  return String(name||'SVC').replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()||'SVC';
+  return m?m.tag:shortTag(name,'SVC',false);
 }
 async function fetchAgentServices(configUrl){
   try{
@@ -580,7 +585,7 @@ function relTime(iso){
   const mo=Math.floor(d/30);if(mo<12)return mo+'mo ago';
   return Math.floor(mo/12)+'y ago';
 }
-function repoTag(name){return (String(name).replace(/[^A-Za-z0-9]/g,'').slice(0,4)||'REPO').toUpperCase();}
+function repoTag(name){return shortTag(name,'REPO',true);}
 
 /* Roll a repo's check-runs up into one verdict. failure/cancelled/etc → crit;
    any still running → info; all good → ok; no checks configured → neutral. */
