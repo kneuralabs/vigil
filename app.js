@@ -132,6 +132,23 @@ function cacheSet(check,domain,data){
   try{localStorage.setItem(cacheKey(check,domain),JSON.stringify({t:Date.now(),d:data}));}catch(_){}
 }
 
+/* Fetch JSON through the shared cache. Every public-API check repeated the same
+   four steps — read the 5-minute cache (unless force-refreshing), fetch on a
+   miss, optionally reject on a non-2xx response, then write the fresh JSON back
+   — so centralise the cache contract here. Returns {data, cached}; `cached`
+   lets callers tailor their event-feed messaging. opts.throwOn is a message
+   prefix that rejects on !res.ok; opts.headers sets request headers. */
+async function fetchJSONCached(check,domain,url,force,opts){
+  opts=opts||{};
+  const hit=force?null:cacheGet(check,domain);
+  if(hit!=null)return {data:hit,cached:true};
+  const r=await fetch(url,opts.headers?{headers:opts.headers}:undefined);
+  if(opts.throwOn&&!r.ok)throw new Error(opts.throwOn+r.status);
+  const data=await r.json();
+  cacheSet(check,domain,data);
+  return {data,cached:false};
+}
+
 /* ---------- count-up animation for KPI numbers ---------- */
 function animateCount(el,to,suffix,dur){
   if(el.__raf)cancelAnimationFrame(el.__raf);
@@ -216,12 +233,9 @@ function intranetRow(tag,name,sub,cls,label,latPct){
    keep it and let the live probe decide, so we never hide a real host). */
 async function dohResolves(host){
   try{
-    let d=cacheGet('doh-sub-A',host);
-    if(!d){
-      const r=await fetch('https://dns.google/resolve?name='+encodeURIComponent(host)+'&type=A');
-      d=await r.json();
-      cacheSet('doh-sub-A',host,d);
-    }
+    /* Subdomain resolution always reads the cache (no force) — a full re-scan
+       re-probes reachability but reuses freshly-resolved A records. */
+    const {data:d}=await fetchJSONCached('doh-sub-A',host,'https://dns.google/resolve?name='+encodeURIComponent(host)+'&type=A',false);
     if(d&&Array.isArray(d.Answer)&&d.Answer.length)return 'yes';
     if(d&&d.Status===3)return 'no';   /* NXDOMAIN — the name does not exist */
     return 'unknown';
@@ -248,6 +262,8 @@ async function probeOne(url,timeoutMs){
    ============================================================ */
 async function checkSSLandCT(force){
   try{
+    /* Kept inline rather than via fetchJSONCached so the "Querying…" event is
+       logged before the network wait (progress feedback), not after it. */
     let data=force?null:cacheGet('crtsh',PUBLIC_DOMAIN);
     if(data){
       addEvent('info','SSL & CT Scan','Using cached crt.sh data for '+PUBLIC_DOMAIN+' (≤5 min old)');
@@ -357,12 +373,7 @@ async function checkDNS(force){
     addEvent('info','DNS Probe','Google DoH resolving '+PUBLIC_DOMAIN+' records…');
     for(const {t,code} of types){
       try{
-        let d=force?null:cacheGet('doh-'+t,PUBLIC_DOMAIN);
-        if(!d){
-          const r=await fetch('https://dns.google/resolve?name='+encodeURIComponent(PUBLIC_DOMAIN)+'&type='+code);
-          d=await r.json();
-          cacheSet('doh-'+t,PUBLIC_DOMAIN,d);
-        }
+        const {data:d}=await fetchJSONCached('doh-'+t,PUBLIC_DOMAIN,'https://dns.google/resolve?name='+encodeURIComponent(PUBLIC_DOMAIN)+'&type='+code,force);
         if(d.Answer){
           d.Answer.forEach(a=>{rows.push({type:t,val:a.data});});
           if(t==='MX'){hasMX=true;setCard('mx','ok','MX','Mail configured',{pct:100});}
@@ -611,13 +622,7 @@ async function checkCodeChecks(force){
   titleEl.textContent='Fetching Kneuralabs repositories…';titleEl.style.color='var(--info)';
   listEl.innerHTML=loadingNote('Querying GitHub for repository check status…');
   try{
-    let repos=force?null:cacheGet('gh-repos',SENTINEL_ORG);
-    if(!repos){
-      const r=await fetch('https://api.github.com/users/'+SENTINEL_ORG+'/repos?per_page=100&sort=pushed');
-      if(!r.ok)throw new Error('GitHub HTTP '+r.status);
-      repos=await r.json();
-      cacheSet('gh-repos',SENTINEL_ORG,repos);
-    }
+    const {data:repos}=await fetchJSONCached('gh-repos',SENTINEL_ORG,'https://api.github.com/users/'+SENTINEL_ORG+'/repos?per_page=100&sort=pushed',force,{throwOn:'GitHub HTTP '});
     if(!Array.isArray(repos)||!repos.length){
       if(radar)radar.classList.remove('live');
       badge.className='badge warn';badge.textContent='NO REPOS';
@@ -631,13 +636,7 @@ async function checkCodeChecks(force){
     const results=await Promise.all(top.map(async repo=>{
       const ref=repo.default_branch||'HEAD';
       try{
-        let cr=force?null:cacheGet('gh-checks',repo.full_name);
-        if(!cr){
-          const r=await fetch('https://api.github.com/repos/'+repo.full_name+'/commits/'+encodeURIComponent(ref)+'/check-runs',{headers:{'Accept':'application/vnd.github+json'}});
-          if(!r.ok)throw new Error('HTTP '+r.status);
-          cr=await r.json();
-          cacheSet('gh-checks',repo.full_name,cr);
-        }
+        const {data:cr}=await fetchJSONCached('gh-checks',repo.full_name,'https://api.github.com/repos/'+repo.full_name+'/commits/'+encodeURIComponent(ref)+'/check-runs',force,{throwOn:'HTTP ',headers:{'Accept':'application/vnd.github+json'}});
         return {repo,runs:Array.isArray(cr.check_runs)?cr.check_runs:[],err:null};
       }catch(e){return {repo,runs:null,err:e.message};}
     }));
@@ -703,14 +702,23 @@ async function runAllChecks(opts){
   document.getElementById('event-feed').innerHTML='';
   addEvent('info','Scan Started','Live checks on '+PUBLIC_DOMAIN+' via crt.sh + Google DoH (100% free, no API key)');
 
-  /* crt.sh must finish first — it populates the subdomain list the sweep probes. */
-  await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet(),checkCodeChecks(force)]);
-  await checkSubdomains();
-
-  addEvent('ok','Scan Complete','Public surface, '+Object.keys(DISCOVERED_SUBS).length+' subdomains, and intranet probe done. Connect the agent for live internal events.');
-  btn.disabled=false;btn.innerHTML='<span class="ico">&#x21BB;</span>Refresh';
-  if(scanBtn){scanBtn.disabled=false;scanBtn.innerHTML='<span class="ico">&#x25B6;</span>Run Scan';}
-  scanning=false;
+  /* Guard the whole run: individual checks catch their own errors, but an
+     unexpected throw here (e.g. a missing DOM node) must never leave the
+     buttons stuck on "Scanning…" or `scanning` latched true — the latter would
+     also silently disable the auto-refresh, freezing the dashboard until a full
+     reload. finally guarantees the UI and scan state always recover. */
+  try{
+    /* crt.sh must finish first — it populates the subdomain list the sweep probes. */
+    await Promise.all([checkSSLandCT(force),checkDNS(force),checkIntranet(),checkCodeChecks(force)]);
+    await checkSubdomains();
+    addEvent('ok','Scan Complete','Public surface, '+Object.keys(DISCOVERED_SUBS).length+' subdomains, and intranet probe done. Connect the agent for live internal events.');
+  }catch(e){
+    addEvent('crit','Scan Error','A monitoring module failed unexpectedly: '+(e&&e.message?e.message:e));
+  }finally{
+    btn.disabled=false;btn.innerHTML='<span class="ico">&#x21BB;</span>Refresh';
+    if(scanBtn){scanBtn.disabled=false;scanBtn.innerHTML='<span class="ico">&#x25B6;</span>Run Scan';}
+    scanning=false;
+  }
 }
 
 /* ============================================================
